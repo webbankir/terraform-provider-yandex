@@ -183,6 +183,17 @@ func provider(emptyFolder bool) *schema.Provider {
 			"yandex_vpc_subnet":                   dataSourceYandexVPCSubnet(),
 			"yandex_ydb_database_dedicated":       dataSourceYandexYDBDatabaseDedicated(),
 			"yandex_ydb_database_serverless":      dataSourceYandexYDBDatabaseServerless(),
+
+			"yandex_lockbox_secret_payload":       dataSourceYandexLockBoxSecretPayload(),
+			"yandex_certificate_manager_list":     dataSourceYandexCertificateManagerList(),
+			"yandex_certificate_manager_content":  dataSourceYandexCertificateManagerContent(),
+			"yandex_billing_account":              dataSourceYandexBillingAccountContent(),
+			"yandex_resource_mdb_mysql":           dataSourceYandexResourcesMdbMySqlContent(),
+			"yandex_resource_mdb_postgresql":      dataSourceYandexResourcesMdbPostgreSqlContent(),
+			"yandex_resource_mdb_mongodb":         dataSourceYandexResourcesMdbMongoDbContent(),
+			"yandex_resource_mdb_redis":           dataSourceYandexResourcesMdbRedisContent(),
+			"yandex_resource_compute_cloud":       dataSourceYandexResourcesComputeCloudContent(),
+
 		},
 
 		ResourcesMap: map[string]*schema.Resource{
