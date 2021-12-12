@@ -1,9 +1,17 @@
-## 0.68.0 (Unreleased)
+## 0.69.0 (Unreleased)
+
+## 0.68.0 (December 10, 2021)
 FEATURES:
 * mdb: added the ability to upgrade Kafka version using the `version` attribute of `yandex_mdb_kafka_cluster` resource.
 
 BUG FIXES:
 * alb: fix behavior of attribute `address_type` in `yandex_alb_target_group` resource
+* alb: fix behavior of attribute `route.http_route.http_route_action.host_rewrite` in `yandex_alb_virtual_host` resource
+* mdb: fix crash when empty config is specified for Kafka topic within `yandex_mdb_kafka_topic` and `yandex_mdb_kafka_cluster` resources
+
+ENHANCEMENTS:
+* alb: add `private_ipv4_address` attribute to `target` entity in `yandex_alb_target_group` resource and data source
+* compute: add `pooled` attribute in `yandex_compute_image` resource and data source
 
 ## 0.67.0 (November 22, 2021)
 ENHANCEMENTS:
