@@ -1,4 +1,21 @@
-## 0.69.0 (Unreleased)
+## 0.70.0 (Unreleased)
+
+## 0.69.0 (December 27, 2021)
+FEATURES:
+* **New Data Source:** `yandex_cdn_origin_group`
+* **New Data Source:** `yandex_cdn_resource`
+* **New Data Source:** `yandex_serverless_container`
+* **New Resource:** `yandex_cdn_origin_group`
+* **New Resource:** `yandex_cdn_resource`
+* **New Resource:** `yandex_serverless_container`
+* alb: add `stream_backend` attribute to `yandex_alb_backend_group` resource and data source
+* alb: add `stream` attribute to `listener` entity in `yandex_alb_load_balancer` resource and data source
+
+BUG FIXES:
+* docs: Fixed few minor inaccuracies of `yandex_alb_virtual_host` resource
+
+FEATURES:
+* compute: added `block_size` in `yandex_compute_disk` and `yandex_compute_instance` resources.
 
 ## 0.68.0 (December 10, 2021)
 FEATURES:

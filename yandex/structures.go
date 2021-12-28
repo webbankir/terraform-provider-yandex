@@ -39,6 +39,17 @@ func expandStringSet(v interface{}) []string {
 	return result
 }
 
+func expandStringSlice(v []interface{}) []string {
+	if v == nil {
+		return nil
+	}
+	s := make([]string, len(v))
+	for i, val := range v {
+		s[i] = val.(string)
+	}
+	return s
+}
+
 func expandLabels(v interface{}) (map[string]string, error) {
 	m := make(map[string]string)
 	if v == nil {
@@ -97,6 +108,7 @@ func flattenInstanceBootDisk(ctx context.Context, instance *compute.Instance, di
 		"name":        disk.Name,
 		"description": disk.Description,
 		"size":        toGigabytes(disk.Size),
+		"block_size":  int(disk.BlockSize),
 		"type":        disk.TypeId,
 		"image_id":    disk.GetSourceImageId(),
 		"snapshot_id": disk.GetSourceSnapshotId(),
@@ -309,6 +321,10 @@ func expandBootDiskSpec(d *schema.ResourceData, config *Config) (*compute.Attach
 
 	if v, ok := d.GetOk("boot_disk.0.initialize_params.0.size"); ok {
 		diskSpec.Size = toBytes(v.(int))
+	}
+
+	if v, ok := d.GetOk("boot_disk.0.initialize_params.0.block_size"); ok {
+		diskSpec.BlockSize = int64(v.(int))
 	}
 
 	if diskSpec.Size == 0 {
