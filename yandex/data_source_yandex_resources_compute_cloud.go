@@ -41,6 +41,22 @@ func dataSourceYandexResourcesComputeCloudContent() *schema.Resource {
 							Type:     schema.TypeInt,
 							Computed: true,
 						},
+						"cpus": {
+							Type:     schema.TypeList,
+							Computed: true,
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"total": {
+										Type:     schema.TypeInt,
+										Computed: true,
+									},
+									"fraction": {
+										Type:     schema.TypeInt,
+										Computed: true,
+									},
+								},
+							},
+						},
 						"memory": {
 							Type:     schema.TypeInt,
 							Computed: true,
@@ -112,15 +128,27 @@ func dataSourceYandexResourcesComputeCloudContentRead(d *schema.ResourceData, me
 
 		var totalCores float64 = 0
 		var totalMemory int64 = 0
+		cpus := make(map[int64]int64)
 
 		for _, item := range filtered {
+			cpus[item.Resources.CoreFraction] = cpus[item.Resources.CoreFraction] + item.Resources.Cores
 			totalCores += (float64(item.Resources.Cores) * float64(item.Resources.CoreFraction)) / 100
 			totalMemory += item.Resources.Memory
 		}
 
 		m := make(map[string]interface{})
+
+		var cpusArray []map[string]int64
+		for k, v := range cpus {
+			cpusArray = append(cpusArray, map[string]int64{
+				"total":    v,
+				"fraction": k,
+			})
+		}
+
 		m["cores"] = totalCores
 		m["memory"] = totalMemory
+		m["cpus"] = cpusArray
 
 		switch platformId {
 		case "standard-v1":

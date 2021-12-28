@@ -34,3 +34,5 @@ website/vendor
 !command/test-fixtures/**/.terraform/
 vendor
 Makefile
+
+test/
