@@ -1,4 +1,6 @@
-## 0.71.0 (Unreleased)
+## 0.72.0 (Unreleased)
+
+## 0.71.0 (February 08, 2021)
 ENHANCEMENTS:
 * allow `initial` of `0` for `yandex_kubernetes_node_group` `auto_scale` policy.
 * dataproc: now cluster version specified in create cluster request is treated as a semantic version prefix. So specified version `2.0` may lead to creation of cluster version `2.0.30` and this will not be considered a change in terraform state.
@@ -7,6 +9,7 @@ ENHANCEMENTS:
 BUG FIXES:
 * alb: fix behavior of attribute `weight` in `http_backend` and `grpc_backend` and `stream_backend` in `yandex_alb_backend_group` resource
 * datatransfer: make `yandex_datatransfer_transfer` importable in accordance with the documentation
+* mdb: fix the optional parameter `preallocate` for kafka topic config when it is absent
 
 ## 0.70.0 (January 17, 2022)
 FEATURES:
