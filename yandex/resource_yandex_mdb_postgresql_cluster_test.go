@@ -178,6 +178,8 @@ func TestAccMDBPostgreSQLCluster_full(t *testing.T) {
 					resource.TestCheckResourceAttr(pgResource, "folder_id", folderID),
 					resource.TestCheckResourceAttr(pgResource, "description", pgDesc2),
 					resource.TestCheckResourceAttrSet(pgResource, "host.0.fqdn"),
+					resource.TestCheckResourceAttrSet(pgResource, "config.0.access.0.web_sql"),
+					resource.TestCheckResourceAttrSet(pgResource, "config.0.access.0.serverless"),
 					testAccCheckMDBPGClusterContainsLabel(&cluster, "new_key", "new_value"),
 					testAccCheckMDBPGClusterHasResources(&cluster, "s2.micro", "network-ssd", 19327352832),
 					testAccCheckMDBPGClusterHasPoolerConfig(&cluster, "TRANSACTION", false),
@@ -901,7 +903,8 @@ resource "yandex_mdb_postgresql_cluster" "foo" {
       disk_type_id       = "network-ssd"
     }
     access {
-      web_sql = true
+      web_sql    = true
+      serverless = true
     }
     performance_diagnostics {
       sessions_sampling_interval   = 9
@@ -1139,21 +1142,21 @@ resource "yandex_mdb_postgresql_cluster" "foo" {
   }
 
   host {
-	zone      		 = "ru-central1-a"
-	name      		 = "na"
+    zone      		 = "ru-central1-a"
+    name      		 = "na"
     subnet_id 		 = "${yandex_vpc_subnet.mdb-pg-test-subnet-a.id}"
-	assign_public_ip = true
+    assign_public_ip = true
   }
   host {
-	zone                    = "ru-central1-b"
-	name                    = "nb"
-	replication_source_name = "nc"
+    zone                    = "ru-central1-b"
+    name                    = "nb"
+    replication_source_name = "nc"
     subnet_id               = "${yandex_vpc_subnet.mdb-pg-test-subnet-b.id}"
   }
   host {
-	zone      = "ru-central1-c"
-	name      = "nc"
-	priority  = 2
+    zone      = "ru-central1-c"
+    name      = "nc"
+    priority  = 2
     subnet_id = "${yandex_vpc_subnet.mdb-pg-test-subnet-c.id}"
   }
 
@@ -1233,21 +1236,21 @@ resource "yandex_mdb_postgresql_cluster" "foo" {
   }
 
   host {
-	zone      = "ru-central1-a"
-	name      = "na"
+    zone      = "ru-central1-a"
+    name      = "na"
     subnet_id = "${yandex_vpc_subnet.mdb-pg-test-subnet-a.id}"
-	priority  = 1
+    priority  = 1
   }
   host {
-	zone                    = "ru-central1-b"
-	name                    = "nb"
-	replication_source_name = "na"
+    zone                    = "ru-central1-b"
+    name                    = "nb"
+    replication_source_name = "na"
     subnet_id               = "${yandex_vpc_subnet.mdb-pg-test-subnet-b.id}"
   }
   host {
-	zone      		 = "ru-central1-c"
-	name      		 = "nc"
-	assign_public_ip = true
+    zone      		 = "ru-central1-c"
+    name      		 = "nc"
+    assign_public_ip = true
     subnet_id 		 = "${yandex_vpc_subnet.mdb-pg-test-subnet-c.id}"
   }
 

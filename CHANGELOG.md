@@ -1,4 +1,28 @@
-## 0.72.0 (Unreleased)
+## 0.73.0 (Unreleased)
+ENHANCEMENTS:
+* compute: add `host_affinity_rules` attribute to `placement_policy` in `yandex_compute_instance` resource and data source
+
+BUG FIXES:
+* compute: avoid unnecessary start/stop operations for instance while updating secondary disk configuration
+* compute: detach secondary disk from instance before deleting
+
+## 0.72.0 (March 02, 2022)
+ENHANCEMENTS:
+* mdb: add `serverless` attribute to `access` entity in `yandex_mdb_postgresql_cluster` resource and data source
+* add `ssl_certificate` attribute in `yandex_cdn_resource` resource and data source
+* alb: change `http_backend` and `grpc_backend` and `stream_backend` and `healthcheck` attribute types from Set to List in `yandex_alb_backend_group` resource
+* mdb: add `priority` and `backup_priority` attributes to `host` entity in `yandex_mdb_mysql_cluster` resource and data source
+* mdb: add `embedded_keeper` attribute in `yandex_mdb_clickhouse_cluster` resource and data_source
+
+FEATURES:
+* mdb: support MongoDB enterprise 4.4 and 5.0 in `yandex_mdb_mongodb_cluster`
+* kafka: support change `assign_public_ip` flag in Kafka clusters
+* resource-manager: add `yandex_resourcemanager_cloud` resource.
+
+BUG FIXES:
+* alb: fix behavior of attribute `validation_context` of `tls` entity in `yandex_alb_backend_group` resource
+* alb: fix behavior of `send` and `receive` attributes of `stream_healthcheck` entity in `yandex_alb_backend_group` resource
+* docs: Fixed few minor inaccuracies of `yandex_alb_load_balancer` resource
 
 ## 0.71.0 (February 08, 2021)
 ENHANCEMENTS:
