@@ -1,10 +1,18 @@
 ## 0.73.0 (Unreleased)
 ENHANCEMENTS:
 * compute: add `host_affinity_rules` attribute to `placement_policy` in `yandex_compute_instance` resource and data source
+* alb: support `storage_bucket` as a target in `yandex_alb_backend_group` resource and data source
 
 BUG FIXES:
 * compute: avoid unnecessary start/stop operations for instance while updating secondary disk configuration
 * compute: detach secondary disk from instance before deleting
+* dataproc: add `assign_public_ip` attribute to `subcluster_spec` entity. If set to `true` then public ip addresses will be assigned to hosts of the subcluster
+* docs: fixed exported attributes for `yandex_vpc_network` datasource
+* docs: fixed `yandex_vpc_address` resource documentation
+
+FEATURES:
+* mdb: support `persistence_mode` in `yandex_mdb_redis_cluster`
+* kafka: support connector resource and data source in Kafka clusters
 
 ## 0.72.0 (March 02, 2022)
 ENHANCEMENTS:
