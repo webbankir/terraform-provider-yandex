@@ -127,7 +127,7 @@ func resourceYandexMDBMySQLCluster() *schema.Resource {
 							},
 						},
 						"global_permissions": {
-							Type: schema.TypeList,
+							Type: schema.TypeSet,
 							Elem: &schema.Schema{
 								Type: schema.TypeString,
 							},
@@ -362,6 +362,36 @@ func resourceYandexMDBMySQLCluster() *schema.Resource {
 				Optional: true,
 				Computed: true,
 			},
+			"performance_diagnostics": {
+				Type:     schema.TypeList,
+				MaxItems: 1,
+				Optional: true,
+				Computed: true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"enabled": {
+							Type:     schema.TypeBool,
+							Optional: true,
+							Computed: true,
+						},
+						"sessions_sampling_interval": {
+							Type:     schema.TypeInt,
+							Required: true,
+						},
+						"statements_sampling_interval": {
+							Type:     schema.TypeInt,
+							Required: true,
+						},
+					},
+				},
+			},
+			"host_group_ids": {
+				Type:     schema.TypeSet,
+				Elem:     &schema.Schema{Type: schema.TypeString},
+				Set:      schema.HashString,
+				Optional: true,
+				Computed: true,
+			},
 		},
 	}
 }
@@ -455,6 +485,7 @@ func resourceYandexMDBMySQLClusterRestore(d *schema.ResourceData, meta interface
 		NetworkId:        req.NetworkId,
 		FolderId:         req.FolderId,
 		SecurityGroupIds: req.SecurityGroupIds,
+		HostGroupIds:     req.HostGroupIds,
 	}))
 	if err != nil {
 		return fmt.Errorf("Error while requesting API to create MySQL Cluster from backup %v: %s", backupID, err)
@@ -528,10 +559,11 @@ func prepareCreateMySQLRequest(d *schema.ResourceData, meta *Config) (*mysql.Cre
 
 	version := d.Get("version").(string)
 	configSpec := &mysql.ConfigSpec{
-		Version:           version,
-		Resources:         resources,
-		BackupWindowStart: backupWindowStart,
-		Access:            expandMySQLAccess(d),
+		Version:                version,
+		Resources:              resources,
+		BackupWindowStart:      backupWindowStart,
+		Access:                 expandMySQLAccess(d),
+		PerformanceDiagnostics: expandMyPerformanceDiagnostics(d),
 	}
 
 	_, err = expandMySQLConfigSpecSettings(d, configSpec)
@@ -540,6 +572,7 @@ func prepareCreateMySQLRequest(d *schema.ResourceData, meta *Config) (*mysql.Cre
 	}
 
 	securityGroupIds := expandSecurityGroupIds(d.Get("security_group_ids"))
+	hostGroupIds := expandHostGroupIds(d.Get("host_group_ids"))
 
 	networkID, err := expandAndValidateNetworkId(d, meta)
 	if err != nil {
@@ -559,6 +592,7 @@ func prepareCreateMySQLRequest(d *schema.ResourceData, meta *Config) (*mysql.Cre
 		Labels:             labels,
 		SecurityGroupIds:   securityGroupIds,
 		DeletionProtection: d.Get("deletion_protection").(bool),
+		HostGroupIds:       hostGroupIds,
 	}
 	return &req, nil
 }
@@ -690,6 +724,19 @@ func resourceYandexMDBMySQLClusterRead(d *schema.ResourceData, meta interface{})
 		return err
 	}
 
+	perfDiag, err := flattenMyPerformanceDiagnostics(cluster.Config.PerformanceDiagnostics)
+	if err != nil {
+		return err
+	}
+
+	if err := d.Set("performance_diagnostics", perfDiag); err != nil {
+		return err
+	}
+
+	if err = d.Set("host_group_ids", cluster.HostGroupIds); err != nil {
+		return err
+	}
+
 	return d.Set("created_at", getTimestamp(cluster.CreatedAt))
 }
 
@@ -729,16 +776,17 @@ func resourceYandexMDBMySQLClusterUpdate(d *schema.ResourceData, meta interface{
 }
 
 var mdbMysqlUpdateFieldsMap = map[string]string{
-	"name":                "name",
-	"description":         "description",
-	"labels":              "labels",
-	"access":              "config_spec.access",
-	"security_group_ids":  "security_group_ids",
-	"backup_window_start": "config_spec.backup_window_start",
-	"resources":           "config_spec.resources",
-	"version":             "config_spec.version",
-	"maintenance_window":  "maintenance_window",
-	"deletion_protection": "deletion_protection",
+	"name":                    "name",
+	"description":             "description",
+	"labels":                  "labels",
+	"access":                  "config_spec.access",
+	"backup_window_start":     "config_spec.backup_window_start",
+	"resources":               "config_spec.resources",
+	"version":                 "config_spec.version",
+	"performance_diagnostics": "config_spec.performance_diagnostics",
+	"security_group_ids":      "security_group_ids",
+	"maintenance_window":      "maintenance_window",
+	"deletion_protection":     "deletion_protection",
 }
 
 func updateMysqlClusterParams(d *schema.ResourceData, meta interface{}) error {
@@ -751,10 +799,11 @@ func updateMysqlClusterParams(d *schema.ResourceData, meta interface{}) error {
 	resources := expandMysqlResources(d)
 	backupWindowStart := expandMysqlBackupWindowStart(d)
 	req.ConfigSpec = &mysql.ConfigSpec{
-		Resources:         resources,
-		Version:           d.Get("version").(string),
-		BackupWindowStart: backupWindowStart,
-		Access:            expandMySQLAccess(d),
+		Resources:              resources,
+		Version:                d.Get("version").(string),
+		BackupWindowStart:      backupWindowStart,
+		Access:                 expandMySQLAccess(d),
+		PerformanceDiagnostics: expandMyPerformanceDiagnostics(d),
 	}
 
 	updateFieldConfigName, err := expandMySQLConfigSpecSettings(d, req.ConfigSpec)
@@ -846,6 +895,9 @@ func getMysqlClusterUpdateRequest(d *schema.ResourceData) (*mysql.UpdateClusterR
 	}
 
 	securityGroupIds := expandSecurityGroupIds(d.Get("security_group_ids"))
+	if d.HasChange("host_group_ids") {
+		return nil, fmt.Errorf("host_group_ids change is not supported yet")
+	}
 
 	maintenanceWindow, err := expandMySQLMaintenanceWindow(d)
 	if err != nil {

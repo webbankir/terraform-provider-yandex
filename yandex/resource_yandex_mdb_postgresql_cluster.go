@@ -10,9 +10,8 @@ import (
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
-	"google.golang.org/genproto/protobuf/field_mask"
-
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/postgresql/v1"
+	"google.golang.org/genproto/protobuf/field_mask"
 )
 
 const (
@@ -442,6 +441,13 @@ func resourceYandexMDBPostgreSQLCluster() *schema.Resource {
 				Optional: true,
 				Computed: true,
 			},
+			"host_group_ids": {
+				Type:     schema.TypeSet,
+				Elem:     &schema.Schema{Type: schema.TypeString},
+				Set:      schema.HashString,
+				Optional: true,
+				Computed: true,
+			},
 		},
 	}
 }
@@ -505,15 +511,18 @@ func resourceYandexMDBPostgreSQLClusterRead(d *schema.ResourceData, meta interfa
 		return err
 	}
 
-	fHosts, hostMasterName, err := flattenPGHosts(d, hosts, false)
+	orderedHostInfos, err := flattenPGHostsInfo(d, hosts)
 	if err != nil {
 		return err
 	}
 
+	fHosts := flattenPGHostsFromHostInfos(orderedHostInfos, false)
+	masterHostname := getMasterHostname(orderedHostInfos)
+
 	if err := d.Set("host", fHosts); err != nil {
 		return err
 	}
-	if err := d.Set("host_master_name", hostMasterName); err != nil {
+	if err := d.Set("host_master_name", masterHostname); err != nil {
 		return err
 	}
 
@@ -542,6 +551,10 @@ func resourceYandexMDBPostgreSQLClusterRead(d *schema.ResourceData, meta interfa
 	}
 
 	d.Set("deletion_protection", cluster.DeletionProtection)
+
+	if err = d.Set("host_group_ids", cluster.HostGroupIds); err != nil {
+		return err
+	}
 
 	return d.Set("database", flattenPGDatabases(databases))
 }
@@ -661,6 +674,7 @@ func resourceYandexMDBPostgreSQLClusterRestore(d *schema.ResourceData, meta inte
 		NetworkId:        createClusterRequest.NetworkId,
 		FolderId:         createClusterRequest.FolderId,
 		SecurityGroupIds: createClusterRequest.SecurityGroupIds,
+		HostGroupIds:     createClusterRequest.HostGroupIds,
 	}))
 	if err != nil {
 		return fmt.Errorf("Error while requesting API to create PostgreSQL Cluster from backup %v: %s", backupID, err)
@@ -742,6 +756,7 @@ func prepareCreatePostgreSQLRequest(d *schema.ResourceData, meta *Config) (*post
 	}
 
 	securityGroupIds := expandSecurityGroupIds(d.Get("security_group_ids"))
+	hostGroupIds := expandHostGroupIds(d.Get("host_group_ids"))
 
 	networkID, err := expandAndValidateNetworkId(d, meta)
 	if err != nil {
@@ -761,6 +776,7 @@ func prepareCreatePostgreSQLRequest(d *schema.ResourceData, meta *Config) (*post
 		HostSpecs:          hostSpecs,
 		SecurityGroupIds:   securityGroupIds,
 		DeletionProtection: d.Get("deletion_protection").(bool),
+		HostGroupIds:       hostGroupIds,
 	}
 
 	return req, nil
@@ -925,6 +941,9 @@ func getPGClusterUpdateRequest(d *schema.ResourceData) (ucr *postgresql.UpdateCl
 	}
 
 	securityGroupIds := expandSecurityGroupIds(d.Get("security_group_ids"))
+	if d.HasChange("host_group_ids") {
+		return nil, updateFieldConfigName, fmt.Errorf("host_group_ids change is not supported yet")
+	}
 
 	maintenanceWindow, err := expandPGMaintenanceWindow(d)
 	if err != nil {
@@ -1093,15 +1112,24 @@ func updatePGClusterUsersUpdateAndDrop(d *schema.ResourceData, meta interface{})
 }
 
 func updatePGClusterHosts(d *schema.ResourceData, meta interface{}) error {
+	// Ideas:
+	// 1. In order to do it safely for clients: firstly add new hosts and only then delete unneeded hosts
+	// 2. Batch Add/Update operations are not supported, so we should update hosts one by one
+	//    It may produce issues with cascade replicas: we should change replication-source in such way, that
+	//    there is no attempts to create replication loop
+	//    Solution: update HA-replicas first, then use BFS (using `comparePGHostsInfoResult.hierarchyExists`)
+
 	config := meta.(*Config)
 	ctx, cancel := config.ContextWithTimeout(d.Timeout(schema.TimeoutUpdate))
 	defer cancel()
 
+	// Step 1: Add new hosts (as HA-hosts):
 	err := createPGClusterHosts(ctx, config, d)
 	if err != nil {
 		return err
 	}
 
+	// Step 2: update hosts:
 	currHosts, err := listPGHosts(ctx, config, d.Id())
 	if err != nil {
 		return err
@@ -1112,21 +1140,14 @@ func updatePGClusterHosts(d *schema.ResourceData, meta interface{}) error {
 		return err
 	}
 
-	hostsToDelete := []string{}
-
 	for _, hostInfo := range compareHostsInfo.hostsInfo {
-		if !hostInfo.isNew {
-			hostsToDelete = append(hostsToDelete, hostInfo.fqdn)
-		} else if compareHostsInfo.haveHostWithName {
+		if hostInfo.inTargetSet {
 			var maskPaths []string
 			if hostInfo.oldPriority != hostInfo.newPriority {
 				maskPaths = append(maskPaths, "priority")
 			}
 			if hostInfo.oldReplicationSource != hostInfo.newReplicationSource {
 				maskPaths = append(maskPaths, "replication_source")
-			}
-			if hostInfo.oldAssignPublicIP != hostInfo.newAssignPublicIP {
-				maskPaths = append(maskPaths, "assign_public_ip")
 			}
 			if len(maskPaths) > 0 {
 				if err := updatePGHost(ctx, config, d, &postgresql.UpdateHostSpec{
@@ -1142,22 +1163,24 @@ func updatePGClusterHosts(d *schema.ResourceData, meta interface{}) error {
 		}
 	}
 
-	if err := deletePGHosts(ctx, config, d, hostsToDelete); err != nil {
-		return err
+	// Step 3: delete hosts:
+	for _, hostInfo := range compareHostsInfo.hostsInfo {
+		if !hostInfo.inTargetSet {
+			if err := deletePGHost(ctx, config, d, hostInfo.fqdn); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
 }
 
 func createPGClusterHosts(ctx context.Context, config *Config, d *schema.ResourceData) error {
-
-	currHosts, err := listPGHosts(ctx, config, d.Id())
+	hosts, err := listPGHosts(ctx, config, d.Id())
 	if err != nil {
 		return err
 	}
-
-	compareHostsInfo, err := comparePGHostsInfo(d, currHosts, true)
-
+	compareHostsInfo, err := comparePGHostsInfo(d, hosts, true)
 	if err != nil {
 		return err
 	}
@@ -1166,32 +1189,20 @@ func createPGClusterHosts(ctx context.Context, config *Config, d *schema.Resourc
 		return fmt.Errorf("Create cluster hosts error. Exists host with replication source, which can't be created. Possibly there is a loop")
 	}
 
-	if compareHostsInfo.haveHostWithName {
-		for _, newHostInfo := range compareHostsInfo.createHostsInfo {
-			err := addPGHost(ctx, config, d, &postgresql.HostSpec{
-				ZoneId:            newHostInfo.zone,
-				SubnetId:          newHostInfo.subnetID,
-				AssignPublicIp:    newHostInfo.oldAssignPublicIP,
-				ReplicationSource: newHostInfo.newReplicationSource,
-				Priority:          &wrappers.Int64Value{Value: int64(newHostInfo.newPriority)},
-			})
-			if err != nil {
-				return err
-			}
+	for _, newHostInfo := range compareHostsInfo.createHostsInfo {
+		host := &postgresql.HostSpec{
+			ZoneId:         newHostInfo.zone,
+			SubnetId:       newHostInfo.subnetID,
+			AssignPublicIp: newHostInfo.newAssignPublicIP,
 		}
-	} else {
-		for _, newHostInfo := range compareHostsInfo.createHostsInfo {
-			err := addPGHost(ctx, config, d, &postgresql.HostSpec{
-				ZoneId:         newHostInfo.zone,
-				SubnetId:       newHostInfo.subnetID,
-				AssignPublicIp: newHostInfo.oldAssignPublicIP,
-			})
-			if err != nil {
-				return err
-			}
+		if compareHostsInfo.haveHostWithName {
+			host.ReplicationSource = newHostInfo.newReplicationSource
+			host.Priority = &wrappers.Int64Value{Value: int64(newHostInfo.newPriority)}
+		}
+		if err := addPGHost(ctx, config, d, host); err != nil {
+			return err
 		}
 	}
-
 	if compareHostsInfo.hierarchyExists {
 		return createPGClusterHosts(ctx, config, d)
 	}
@@ -1523,19 +1534,6 @@ func addPGHost(ctx context.Context, config *Config, d *schema.ResourceData, host
 
 	if _, err := op.Response(); err != nil {
 		return fmt.Errorf("creating host for PostgreSQL Cluster %q failed: %s", d.Id(), err)
-	}
-
-	return nil
-}
-
-func deletePGHosts(ctx context.Context, config *Config, d *schema.ResourceData, hostNamesToDelete []string) error {
-	if len(hostNamesToDelete) == 0 {
-		return nil
-	}
-	for _, hostToDelete := range hostNamesToDelete {
-		if err := deletePGHost(ctx, config, d, hostToDelete); err != nil {
-			return err
-		}
 	}
 
 	return nil

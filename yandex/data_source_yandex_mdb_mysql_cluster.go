@@ -134,7 +134,7 @@ func dataSourceYandexMDBMySQLCluster() *schema.Resource {
 							},
 						},
 						"global_permissions": {
-							Type: schema.TypeList,
+							Type: schema.TypeSet,
 							Elem: &schema.Schema{
 								Type: schema.TypeString,
 							},
@@ -285,6 +285,32 @@ func dataSourceYandexMDBMySQLCluster() *schema.Resource {
 				Computed: true,
 				Optional: true,
 			},
+			"performance_diagnostics": {
+				Type:     schema.TypeList,
+				Computed: true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"enabled": {
+							Type:     schema.TypeBool,
+							Computed: true,
+						},
+						"sessions_sampling_interval": {
+							Type:     schema.TypeInt,
+							Computed: true,
+						},
+						"statements_sampling_interval": {
+							Type:     schema.TypeInt,
+							Computed: true,
+						},
+					},
+				},
+			},
+			"host_group_ids": {
+				Type:     schema.TypeSet,
+				Elem:     &schema.Schema{Type: schema.TypeString},
+				Set:      schema.HashString,
+				Computed: true,
+			},
 		},
 	}
 }
@@ -424,6 +450,10 @@ func dataSourceYandexMDBMySQLClusterRead(d *schema.ResourceData, meta interface{
 	}
 
 	d.Set("deletion_protection", cluster.DeletionProtection)
+
+	if err := d.Set("host_group_ids", cluster.HostGroupIds); err != nil {
+		return err
+	}
 
 	d.Set("created_at", getTimestamp(cluster.CreatedAt))
 	d.SetId(clusterID)

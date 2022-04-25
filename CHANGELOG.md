@@ -1,4 +1,24 @@
-## 0.73.0 (Unreleased)
+## 0.75.0 (Unreleased)
+
+## 0.74.0 (April 19, 2022)
+ENHANCEMENTS:
+* iam: support for changing description of `yandex_iam_service_account_key` without recreation
+* mdb: add `performance_diagnostics` section in `yandex_mdb_mysql_cluster` resource and data source
+* mdb: change attribute `yandex_mdb_mysql_cluster.user.global_permissions` type from List to Set
+* alb: add `enable_proxy_protocol` attribute to `stream_backend` entity in `yandex_alb_backend_group` resource and data source
+
+BUG FIXES:
+* postgresql: fix unpredictable behaviour when changing `assign_public_ip` without name
+* storage: fix not saving bucket's `policy` to tfstate
+
+FEATURES:
+* compute: changing `folder_id` attribute leads to move operation for `yandex_compute_instance` and `yandex_compute_disk` resources if `allow_recreate` flag is set to false (or not set). Otherwise, resource will be recreated.
+* mdb: new mysql configuration options added
+* mdb: support audit log (filter, audit_authorization_success) and security (enable, kmip) settings in `yandex_mdb_mongodb_cluster`
+* add `host_group_ids` attribute in `yandex_mdb_mysql_cluster` resource and data source
+* add `host_group_ids` attribute in `yandex_mdb_postgresql_cluster` resource and data source
+
+## 0.73.0 (March 28, 2022)
 ENHANCEMENTS:
 * compute: add `host_affinity_rules` attribute to `placement_policy` in `yandex_compute_instance` resource and data source
 * alb: support `storage_bucket` as a target in `yandex_alb_backend_group` resource and data source
@@ -9,6 +29,7 @@ BUG FIXES:
 * dataproc: add `assign_public_ip` attribute to `subcluster_spec` entity. If set to `true` then public ip addresses will be assigned to hosts of the subcluster
 * docs: fixed exported attributes for `yandex_vpc_network` datasource
 * docs: fixed `yandex_vpc_address` resource documentation
+* dns: fixed `yandex_dns_recordset` resource record data length restriction
 
 FEATURES:
 * mdb: support `persistence_mode` in `yandex_mdb_redis_cluster`
