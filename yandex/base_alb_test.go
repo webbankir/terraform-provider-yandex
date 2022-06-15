@@ -26,6 +26,7 @@ D0M/nOBnNGaGBKG4hNAb5KMUSfrF6Jn6lp0yNIz+LNWNJQVOjZFiw2rM/g==
 -----END CERTIFICATE-----`
 const albDefaultBackendWeight = "1"
 const albDefaultPanicThreshold = "50"
+const albDefaultLoadBalancingMode = "LEAST_REQUEST"
 const albDefaultLocalityPercent = "35"
 const albDefaultTimeout = "3s"
 const albDefaultInterval = "5s"
@@ -35,8 +36,8 @@ const albDefaultHTTP2 = "true"
 const albDefaultHost = "tf-test-host"
 const albDefaultPath = "tf-test-path"
 const albDefaultPort = "3"
-const albDefaultSend = "tf-test-send"
-const albDefaultReceive = "tf-test-receive"
+const albDefaultSendText = "tf-test-send"
+const albDefaultReceiveText = "tf-test-receive"
 const albDefaultDescription = "alb-bg-description"
 const albDefaultDirectResponseBody = "Not Found"
 const albDefaultDirectResponseStatus = "404"
@@ -194,6 +195,7 @@ type resourceALBBackendGroupInfo struct {
 	TlsValidationContext string
 	BackendWeight        string
 	PanicThreshold       string
+	LoadBalancingMode    string
 	LocalityPercent      string
 	StrictLocality       string
 	Timeout              string
@@ -203,8 +205,8 @@ type resourceALBBackendGroupInfo struct {
 	Host                 string
 	Path                 string
 	Port                 string
-	Receive              string
-	Send                 string
+	ReceiveText          string
+	SendText             string
 	ProxyProtocol        string
 	StorageBackendBucket string
 }
@@ -229,6 +231,7 @@ func albBackendGroupInfo() resourceALBBackendGroupInfo {
 		TlsValidationContext: albDefaultValidationContext,
 		BackendWeight:        albDefaultBackendWeight,
 		PanicThreshold:       albDefaultPanicThreshold,
+		LoadBalancingMode:    albDefaultLoadBalancingMode,
 		LocalityPercent:      albDefaultLocalityPercent,
 		StrictLocality:       albDefaultStrictLocality,
 		Timeout:              albDefaultTimeout,
@@ -238,8 +241,8 @@ func albBackendGroupInfo() resourceALBBackendGroupInfo {
 		Host:                 albDefaultHost,
 		Path:                 albDefaultPath,
 		Port:                 albDefaultPort,
-		Receive:              albDefaultReceive,
-		Send:                 albDefaultSend,
+		ReceiveText:          albDefaultReceiveText,
+		SendText:             albDefaultSendText,
 		ProxyProtocol:        albDefaultProxyProtocol,
 	}
 
@@ -554,6 +557,7 @@ EOF
       panic_threshold                = {{.PanicThreshold}}
       locality_aware_routing_percent = {{.LocalityPercent}}
       strict_locality                = {{.StrictLocality}}
+      mode                           = "{{.LoadBalancingMode}}"
     }
     {{ if .IsGRPCCheck }}
     healthcheck {
@@ -569,8 +573,8 @@ EOF
       timeout  = "{{.Timeout}}"
       interval = "{{.Interval}}"
       stream_healthcheck {
-        receive = "{{.Receive}}"
-        send    = "{{.Send}}"
+        receive = "{{.ReceiveText}}"
+        send    = "{{.SendText}}"
       }
     }
     {{end}}
@@ -609,6 +613,7 @@ EOF
       panic_threshold                = {{.PanicThreshold}}
       locality_aware_routing_percent = {{.LocalityPercent}}
       strict_locality                = {{.StrictLocality}}
+      mode                           = "{{.LoadBalancingMode}}"
     }
     {{ if .IsGRPCCheck }}
     healthcheck {
@@ -624,8 +629,8 @@ EOF
       timeout  = "{{.Timeout}}"
       interval = "{{.Interval}}"
       stream_healthcheck {
-        receive = "{{.Receive}}"
-        send    = "{{.Send}}"
+        receive = "{{.ReceiveText}}"
+        send    = "{{.SendText}}"
       }
     }
     {{end}}
@@ -660,6 +665,7 @@ EOF
       panic_threshold                = {{.PanicThreshold}}
       locality_aware_routing_percent = {{.LocalityPercent}}
       strict_locality                = {{.StrictLocality}}
+      mode                           = "{{.LoadBalancingMode}}"
     }
     {{ if .IsGRPCCheck }}
     healthcheck {
@@ -675,8 +681,8 @@ EOF
       timeout  = "{{.Timeout}}"
       interval = "{{.Interval}}"
       stream_healthcheck {
-        receive = "{{.Receive}}"
-        send    = "{{.Send}}"
+        receive = "{{.ReceiveText}}"
+        send    = "{{.SendText}}"
       }
     }
     {{end}}

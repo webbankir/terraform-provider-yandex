@@ -98,6 +98,7 @@ The `load_balancing_config` block supports:
 * `panic_threshold` - (Optional) If percentage of healthy hosts in the backend is lower than panic_threshold, traffic will be routed to all backends no matter what the health status is. This helps to avoid healthy backends overloading  when everything is bad. Zero means no panic threshold.
 * `locality_aware_routing_percent` - (Optional) Percent of traffic to be sent to the same availability zone. The rest will be equally divided between other zones.
 * `strict_locality` - (Optional) If set, will route requests only to the same availability zone. Balancer won't know about endpoints in other zones.
+* `mode` - (Optional) Load balancing mode for the backend. Possible values: "ROUND_ROBIN", "RANDOM", "LEAST_REQUEST", "MAGLEV_HASH".
 
 The `healthcheck` block supports:
 
@@ -115,8 +116,8 @@ The `healthcheck` block supports:
 
 The `stream_healthcheck` block supports:
 
-* `send` - (Optional) Message to send. If empty, it's a connect-only health check.
-* `receive` - (Optional) Text to search in reply.
+* `send` - (Optional) Message sent to targets during TCP data transfer.  If not specified, no data is sent to the target.
+* `receive` - (Optional) Data that must be contained in the messages received from targets for a successful health check. If not specified, no messages are expected from targets, and those that are received are not checked.
 
 The `http_healthcheck` block supports:
 

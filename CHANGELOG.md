@@ -1,4 +1,15 @@
 ## 0.76.0 (Unreleased)
+BUG FIXES:
+* alb: `send` and `receive` attributes can be empty now in `yandex_alb_backend_group` resource and data source
+* alb: fixed `yandex_alb_load_balancer` resource and data source documentation
+* alb: support `mode` attribute in `load_balancing_config` entity in `yandex_alb_backend_group` resource and data source
+* mysql: `mysql_config.sql_mode` is setting now when creating a cluster
+  
+ENHANCEMENTS:
+* alb: refactoring `yandex_alb_backend_group` resource and data source
+
+FEATURES:
+* compute: support for creating `yandex_compute_instance` with local disks
 
 ## 0.75.0 (May 31, 2022)
 ENHANCEMENTS:

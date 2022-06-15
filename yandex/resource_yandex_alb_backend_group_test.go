@@ -754,6 +754,9 @@ func TestAccALBBackendGroup_fullWithHTTPBackend(t *testing.T) {
 					testExistsElementWithAttrValue(
 						albBGResource, "http_backend", "load_balancing_config.0.panic_threshold", albDefaultPanicThreshold, &backendPath,
 					),
+					testExistsElementWithAttrValue(
+						albBGResource, "http_backend", "load_balancing_config.0.mode", albDefaultLoadBalancingMode, &backendPath,
+					),
 				),
 			},
 			albBackendGroupImportStep(),
@@ -1012,10 +1015,10 @@ func TestAccALBBackendGroup_httpBackendWithStreamHealthCheck(t *testing.T) {
 						albBGResource, "http_backend", "healthcheck.*.interval", albDefaultInterval, &backendPath,
 					),
 					testExistsElementWithAttrValue(
-						albBGResource, "http_backend", "healthcheck.*.stream_healthcheck.0.send", albDefaultSend, &backendPath,
+						albBGResource, "http_backend", "healthcheck.*.stream_healthcheck.0.send", albDefaultSendText, &backendPath,
 					),
 					testExistsElementWithAttrValue(
-						albBGResource, "http_backend", "healthcheck.*.stream_healthcheck.0.receive", albDefaultReceive, &backendPath,
+						albBGResource, "http_backend", "healthcheck.*.stream_healthcheck.0.receive", albDefaultReceiveText, &backendPath,
 					),
 				),
 			},
@@ -1108,12 +1111,14 @@ func TestAccALBBackendGroup_grpcBackendWithGRPCHealthCheck(t *testing.T) {
 	})
 }
 
-func TestAccALBBackendGroup_grpcBackendWithStreamHealthCheck(t *testing.T) {
+func TestAccALBBackendGroup_grpcBackendWithEmptyStreamHealthCheck(t *testing.T) {
 	t.Parallel()
 
 	BGResource := albBackendGroupInfo()
 	BGResource.IsGRPCBackend = true
 	BGResource.IsStreamCheck = true
+	BGResource.SendText = ""
+	BGResource.ReceiveText = ""
 
 	var bg apploadbalancer.BackendGroup
 	backendPath := ""
@@ -1136,12 +1141,6 @@ func TestAccALBBackendGroup_grpcBackendWithStreamHealthCheck(t *testing.T) {
 					),
 					testExistsElementWithAttrValue(
 						albBGResource, "grpc_backend", "healthcheck.*.interval", albDefaultInterval, &backendPath,
-					),
-					testExistsElementWithAttrValue(
-						albBGResource, "grpc_backend", "healthcheck.*.stream_healthcheck.0.send", albDefaultSend, &backendPath,
-					),
-					testExistsElementWithAttrValue(
-						albBGResource, "grpc_backend", "healthcheck.*.stream_healthcheck.0.receive", albDefaultReceive, &backendPath,
 					),
 				),
 			},
