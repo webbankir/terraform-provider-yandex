@@ -18,6 +18,7 @@ const (
 	defaultEndpoint        = "api.cloud.yandex.net:443"
 	defaultStorageEndpoint = "storage.yandexcloud.net"
 	defaultYMQEndpoint     = "message-queue.api.cloud.yandex.net"
+	defaultRegion          = "ru-central1"
 )
 
 // Global MutexKV
@@ -57,6 +58,12 @@ func provider(emptyFolder bool) *schema.Provider {
 				Optional:    true,
 				DefaultFunc: schema.EnvDefaultFunc("YC_ORGANIZATION_ID", nil),
 				Description: descriptions["organization_id"],
+			},
+			"region_id": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				DefaultFunc: schema.EnvDefaultFunc("YC_REGION", defaultRegion),
+				Description: descriptions["region"],
 			},
 			"zone": {
 				Type:        schema.TypeString,
@@ -284,6 +291,7 @@ func provider(emptyFolder bool) *schema.Provider {
 			"yandex_resourcemanager_folder_iam_member":            resourceYandexResourceManagerFolderIAMMember(),
 			"yandex_resourcemanager_folder_iam_policy":            resourceYandexResourceManagerFolderIAMPolicy(),
 			"yandex_serverless_container":                         resourceYandexServerlessContainer(),
+			"yandex_serverless_container_iam_binding":             resourceYandexServerlessContainerIAMBinding(),
 			"yandex_storage_bucket":                               resourceYandexStorageBucket(),
 			"yandex_storage_object":                               resourceYandexStorageObject(),
 			"yandex_vpc_address":                                  resourceYandexVPCAddress(),
@@ -293,6 +301,7 @@ func provider(emptyFolder bool) *schema.Provider {
 			"yandex_vpc_security_group":                           resourceYandexVPCSecurityGroup(),
 			"yandex_vpc_security_group_rule":                      resourceYandexVpcSecurityGroupRule(),
 			"yandex_vpc_subnet":                                   resourceYandexVPCSubnet(),
+			"yandex_ydb_database_iam_binding":                     resourceYandexYDBDatabaseIAMBinding(),
 			"yandex_ydb_database_dedicated":                       resourceYandexYDBDatabaseDedicated(),
 			"yandex_ydb_database_serverless":                      resourceYandexYDBDatabaseServerless(),
 		},
@@ -344,6 +353,9 @@ var descriptions = map[string]string{
 
 	"cloud_id": "ID of Yandex.Cloud tenant.",
 
+	"region_id": "The region where operations will take place. Examples\n" +
+		"are ru-central1",
+
 	"zone": "The zone where operations will take place. Examples\n" +
 		"are ru-central1-a, ru-central2-c, etc.",
 
@@ -380,6 +392,7 @@ func providerConfigure(ctx context.Context, d *schema.ResourceData, p *schema.Pr
 	config := Config{
 		Token:                          d.Get("token").(string),
 		ServiceAccountKeyFileOrContent: d.Get("service_account_key_file").(string),
+		Region:                         d.Get("region_id").(string),
 		Zone:                           d.Get("zone").(string),
 		FolderID:                       d.Get("folder_id").(string),
 		CloudID:                        d.Get("cloud_id").(string),

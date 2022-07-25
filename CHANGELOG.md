@@ -1,12 +1,41 @@
-## 0.76.0 (Unreleased)
+## 0.77.0 (Unreleased)
+BUG FIXES:
+* iam: fix access bindings deletion
+* ydb: fixed panic if database was removed outside of terraform
+* storage: fix issue when error, returned from reading extend bucket settings treated as important.
+  It will be printed as log output now instead of interrupting plan execution.
+* greenplum: fix bug with not setting `security groups_ids` in `resource_yandex_mdb_greenplum_cluster`
+* greenplum: fix bug with not setting `access` in `resource_yandex_mdb_greenplum_cluster`
+
+ENHANCEMENTS:
+* mdb: add `sqlcollation` attribute to `yandex_mdb_sqlserver_cluster` resource and data source
+* serverless: increase operation timeouts in `yandex_function` resource
+
+FEATURES:
+* k8s: add `instance_template.name` attribute to `node group` resource and data source
+* k8s: add `instance_template.ipv4_dns_records`, `instance_template.ipv6_dns_records` attributes to `node group` resource and data source
+* k8s: add `instance_template.labels` attribute to `node group` resource and data source
+* greenplum: add fields `greenplum_config` and `pooler_config` in `resource_yandex_mdb_greenplum_cluster`
+* **New Resource:** `yandex_serverless_container_iam_binding`
+* **New Resource:** `yandex_ydb_database_iam_binding`
+
+## 0.76.0 (July 01, 2022)
 BUG FIXES:
 * alb: `send` and `receive` attributes can be empty now in `yandex_alb_backend_group` resource and data source
 * alb: fixed `yandex_alb_load_balancer` resource and data source documentation
 * alb: support `mode` attribute in `load_balancing_config` entity in `yandex_alb_backend_group` resource and data source
 * mysql: `mysql_config.sql_mode` is setting now when creating a cluster
-  
+* mdb: fix changing `maintenance_window` only in `yandex_mdb_redis_cluster`
+* clickhouse: fix issue with `shard_group` update
+* serverless: fix issue with `retention_period` update in `yandex_logging_group` resource
+
 ENHANCEMENTS:
 * alb: refactoring `yandex_alb_backend_group` resource and data source
+* alb: extra validation added to `yandex_alb_load_balancer` and `yandex_alb_virtual_host` resources and data sources
+* mdb: add `client_output_buffer_limit_normal` and `client_output_buffer_limit_pubsub` attributes to `yandex_mdb_redis_cluster` resource and data source
+* mdb: add `replica_priority` attribute to `yandex_mdb_redis_cluster` resource and data source
+* mdb: add `assign_public_ip` attribute to `yandex_mdb_redis_cluster` resource and data source
+* ymq: add `region_id` attribute to resource
 
 FEATURES:
 * compute: support for creating `yandex_compute_instance` with local disks

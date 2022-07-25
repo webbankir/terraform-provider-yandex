@@ -2,6 +2,9 @@ package yandex
 
 import (
 	"fmt"
+	"sort"
+	"strconv"
+	"strings"
 
 	wrappers "github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -10,61 +13,175 @@ import (
 )
 
 type redisConfig struct {
-	timeout              int64
-	maxmemoryPolicy      string
-	notifyKeyspaceEvents string
-	slowlogLogSlowerThan int64
-	slowlogMaxLen        int64
-	databases            int64
-	version              string
+	timeout                       int64
+	maxmemoryPolicy               string
+	notifyKeyspaceEvents          string
+	slowlogLogSlowerThan          int64
+	slowlogMaxLen                 int64
+	databases                     int64
+	version                       string
+	clientOutputBufferLimitNormal string
+	clientOutputBufferLimitPubsub string
+}
+
+const defaultReplicaPriority = 100
+
+func weightFunc(zone, shard, subnet string, priority *wrappers.Int64Value, ipFlag bool) int {
+	weight := 0
+	if zone != "" {
+		weight += 10000
+	}
+	if shard != "" {
+		weight += 1000
+	}
+	if subnet != "" {
+		weight += 100
+	}
+	if priority != nil {
+		weight += 10
+	}
+	if ipFlag {
+		weight += 1
+	}
+	return weight
+}
+
+func getHostWeight(spec *redis.Host) int {
+	return weightFunc(spec.ZoneId, spec.ShardName, spec.SubnetId, spec.ReplicaPriority, spec.AssignPublicIp)
 }
 
 // Sorts list of hosts in accordance with the order in config.
 // We need to keep the original order so there's no diff appears on each apply.
-func sortRedisHosts(hosts []*redis.Host, specs []*redis.HostSpec) {
-	for i, h := range specs {
-		for j := i + 1; j < len(hosts); j++ {
-			if h.ZoneId == hosts[j].ZoneId && (h.ShardName == "" || h.ShardName == hosts[j].ShardName) {
-				hosts[i], hosts[j] = hosts[j], hosts[i]
-				break
+func sortRedisHosts(sharded bool, hosts []*redis.Host, specs []*redis.HostSpec) {
+	for i, hs := range specs {
+		switched := false
+		for j := i; j < len(hosts); j++ {
+			if (hs.ZoneId == hosts[j].ZoneId) &&
+				(hs.ShardName == "" || hs.ShardName == hosts[j].ShardName) &&
+				(hs.SubnetId == "" || hs.SubnetId == hosts[j].SubnetId) &&
+				(sharded || hosts[j].ReplicaPriority != nil && (hs.ReplicaPriority == nil && hosts[j].ReplicaPriority.GetValue() == defaultReplicaPriority ||
+					hs.ReplicaPriority.GetValue() == hosts[j].ReplicaPriority.GetValue())) &&
+				(hs.AssignPublicIp == hosts[j].AssignPublicIp) {
+				if !switched || getHostWeight(hosts[j]) > getHostWeight(hosts[i]) {
+					hosts[i], hosts[j] = hosts[j], hosts[i]
+					switched = true
+				}
 			}
 		}
 	}
 }
 
-// Takes the current list of hosts and the desirable list of hosts.
-// Returns the map of hostnames to delete grouped by shard,
-// and the map of hosts to add grouped by shard as well.
-func redisHostsDiff(currHosts []*redis.Host, targetHosts []*redis.HostSpec) (map[string][]string, map[string][]*redis.HostSpec) {
-	m := map[string][]*redis.HostSpec{}
+func keyFunc(zone, shard, subnet string) string {
+	return fmt.Sprintf("zone:%s;shard:%s;subnet:%s",
+		zone, shard, subnet,
+	)
+}
 
-	for _, h := range targetHosts {
-		key := h.ZoneId + h.ShardName
-		m[key] = append(m[key], h)
+func getHostSpecBaseKey(h *redis.HostSpec) string {
+	return keyFunc(h.ZoneId, h.ShardName, h.SubnetId)
+}
+
+func getHostBaseKey(h *redis.Host) string {
+	return keyFunc(h.ZoneId, h.ShardName, h.SubnetId)
+}
+
+func getHostSpecWeight(spec *redis.HostSpec) int {
+	return weightFunc(spec.ZoneId, spec.ShardName, spec.SubnetId, spec.ReplicaPriority, spec.AssignPublicIp)
+}
+
+// used to detect specs to update, add, delete
+func sortHostSpecs(targetHosts []*redis.HostSpec) []*redis.HostSpec {
+	weightedHosts := make(map[int][]*redis.HostSpec)
+	for _, spec := range targetHosts {
+		weight := getHostSpecWeight(spec)
+		weightedHosts[weight] = append(weightedHosts[weight], spec)
+	}
+
+	keys := make([]int, 0, len(weightedHosts))
+	for k := range weightedHosts {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i] > keys[j]
+	})
+
+	res := []*redis.HostSpec{}
+	for _, k := range keys {
+		res = append(res, weightedHosts[k]...)
+	}
+
+	return res
+}
+
+func separateHostsToUpdateAndDelete(sharded bool, sortedHosts []*redis.HostSpec, currHosts []*redis.Host) (
+	[]*redis.HostSpec, map[string][]*HostUpdateInfo, map[string][]string, error) {
+	targetHostsBaseMap := map[string][]*redis.HostSpec{}
+	for _, h := range sortedHosts {
+		key := getHostSpecBaseKey(h)
+		targetHostsBaseMap[key] = append(targetHostsBaseMap[key], h)
 	}
 
 	toDelete := map[string][]string{}
+	toUpdate := map[string][]*HostUpdateInfo{}
 	for _, h := range currHosts {
-		key := h.ZoneId + h.ShardName
-		hs, ok := m[key]
-		if !ok {
+		key := getHostBaseKey(h)
+		hs, ok := targetHostsBaseMap[key]
+		if ok {
+			newSpec := hs[0]
+			hostInfo, err := getHostUpdateInfo(sharded, h.Name, h.ReplicaPriority, h.AssignPublicIp,
+				newSpec.ReplicaPriority, newSpec.AssignPublicIp)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			if hostInfo != nil {
+				toUpdate[h.ShardName] = append(toUpdate[h.ShardName], hostInfo)
+			}
+			if len(hs) > 1 {
+				targetHostsBaseMap[key] = hs[1:]
+			} else {
+				delete(targetHostsBaseMap, key)
+			}
+		} else {
 			toDelete[h.ShardName] = append(toDelete[h.ShardName], h.Name)
 		}
-		if len(hs) > 1 {
-			m[key] = hs[1:]
-		} else {
-			delete(m, key)
-		}
+	}
+
+	hostsLeft := []*redis.HostSpec{}
+	for _, specs := range targetHostsBaseMap {
+		hostsLeft = append(hostsLeft, specs...)
+	}
+
+	return hostsLeft, toUpdate, toDelete, nil
+}
+
+// Takes the current list of hosts and the desirable list of hosts.
+// Returns the map of hostnames:
+// to delete grouped by shard,
+// to update grouped by shard,
+// to add grouped by shard as well.
+func redisHostsDiff(sharded bool, currHosts []*redis.Host, targetHosts []*redis.HostSpec) (map[string][]string,
+	map[string][]*HostUpdateInfo, map[string][]*redis.HostSpec, error) {
+	sortedHosts := sortHostSpecs(targetHosts)
+	hostsLeft, toUpdate, toDelete, err := separateHostsToUpdateAndDelete(sharded, sortedHosts, currHosts)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
 	toAdd := map[string][]*redis.HostSpec{}
-	for _, hs := range m {
-		for _, h := range hs {
-			toAdd[h.ShardName] = append(toAdd[h.ShardName], h)
-		}
+	for _, h := range hostsLeft {
+		toAdd[h.ShardName] = append(toAdd[h.ShardName], h)
 	}
 
-	return toDelete, toAdd
+	return toDelete, toUpdate, toAdd, nil
+}
+
+func limitToStr(hard, soft, secs *wrappers.Int64Value) string {
+	vals := []string{
+		strconv.FormatInt(hard.GetValue(), 10),
+		strconv.FormatInt(soft.GetValue(), 10),
+		strconv.FormatInt(secs.GetValue(), 10),
+	}
+	return strings.Join(vals, " ")
 }
 
 func extractRedisConfig(cc *redis.ClusterConfig) redisConfig {
@@ -80,6 +197,16 @@ func extractRedisConfig(cc *redis.ClusterConfig) redisConfig {
 		res.slowlogLogSlowerThan = c.GetSlowlogLogSlowerThan().GetValue()
 		res.slowlogMaxLen = c.GetSlowlogMaxLen().GetValue()
 		res.databases = c.GetDatabases().GetValue()
+		res.clientOutputBufferLimitNormal = limitToStr(
+			c.ClientOutputBufferLimitNormal.HardLimit,
+			c.ClientOutputBufferLimitNormal.SoftLimit,
+			c.ClientOutputBufferLimitNormal.SoftSeconds,
+		)
+		res.clientOutputBufferLimitPubsub = limitToStr(
+			c.ClientOutputBufferLimitPubsub.HardLimit,
+			c.ClientOutputBufferLimitPubsub.SoftLimit,
+			c.ClientOutputBufferLimitPubsub.SoftSeconds,
+		)
 	case *redis.ClusterConfig_RedisConfig_6_0:
 		c := rc.RedisConfig_6_0.EffectiveConfig
 		res.maxmemoryPolicy = c.GetMaxmemoryPolicy().String()
@@ -88,6 +215,16 @@ func extractRedisConfig(cc *redis.ClusterConfig) redisConfig {
 		res.slowlogLogSlowerThan = c.GetSlowlogLogSlowerThan().GetValue()
 		res.slowlogMaxLen = c.GetSlowlogMaxLen().GetValue()
 		res.databases = c.GetDatabases().GetValue()
+		res.clientOutputBufferLimitNormal = limitToStr(
+			c.ClientOutputBufferLimitNormal.HardLimit,
+			c.ClientOutputBufferLimitNormal.SoftLimit,
+			c.ClientOutputBufferLimitNormal.SoftSeconds,
+		)
+		res.clientOutputBufferLimitPubsub = limitToStr(
+			c.ClientOutputBufferLimitPubsub.HardLimit,
+			c.ClientOutputBufferLimitPubsub.SoftLimit,
+			c.ClientOutputBufferLimitPubsub.SoftSeconds,
+		)
 	case *redis.ClusterConfig_RedisConfig_6_2:
 		c := rc.RedisConfig_6_2.EffectiveConfig
 		res.maxmemoryPolicy = c.GetMaxmemoryPolicy().String()
@@ -96,9 +233,35 @@ func extractRedisConfig(cc *redis.ClusterConfig) redisConfig {
 		res.slowlogLogSlowerThan = c.GetSlowlogLogSlowerThan().GetValue()
 		res.slowlogMaxLen = c.GetSlowlogMaxLen().GetValue()
 		res.databases = c.GetDatabases().GetValue()
+		res.clientOutputBufferLimitNormal = limitToStr(
+			c.ClientOutputBufferLimitNormal.HardLimit,
+			c.ClientOutputBufferLimitNormal.SoftLimit,
+			c.ClientOutputBufferLimitNormal.SoftSeconds,
+		)
+		res.clientOutputBufferLimitPubsub = limitToStr(
+			c.ClientOutputBufferLimitPubsub.HardLimit,
+			c.ClientOutputBufferLimitPubsub.SoftLimit,
+			c.ClientOutputBufferLimitPubsub.SoftSeconds,
+		)
 	}
 
 	return res
+}
+
+func expandLimit(limit string) ([]*wrappers.Int64Value, error) {
+	vals := strings.Split(limit, " ")
+	if len(vals) != 3 {
+		return nil, fmt.Errorf("%s should be space-separated 3-values string", limit)
+	}
+	res := []*wrappers.Int64Value{}
+	for _, val := range vals {
+		parsed, err := strconv.ParseInt(val, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, &wrappers.Int64Value{Value: parsed})
+	}
+	return res, nil
 }
 
 func expandRedisConfig(d *schema.ResourceData) (*redis.ConfigSpec_RedisSpec, string, error) {
@@ -138,6 +301,23 @@ func expandRedisConfig(d *schema.ResourceData) (*redis.ConfigSpec_RedisSpec, str
 	if v, ok := d.GetOk("config.0.version"); ok {
 		version = v.(string)
 	}
+
+	var expandedNormal []*wrappers.Int64Value
+	var err error
+	if v, ok := d.GetOk("config.0.client_output_buffer_limit_normal"); ok {
+		expandedNormal, err = expandLimit(v.(string))
+		if err != nil {
+			return nil, "", err
+		}
+	}
+	var expandedPubsub []*wrappers.Int64Value
+	if v, ok := d.GetOk("config.0.client_output_buffer_limit_pubsub"); ok {
+		expandedPubsub, err = expandLimit(v.(string))
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
 	switch version {
 	case "5.0":
 		c := config.RedisConfig5_0{
@@ -148,10 +328,30 @@ func expandRedisConfig(d *schema.ResourceData) (*redis.ConfigSpec_RedisSpec, str
 			SlowlogMaxLen:        slowlogMaxLen,
 			Databases:            databases,
 		}
+
+		if len(expandedNormal) != 0 {
+			normalLimit := &config.RedisConfig5_0_ClientOutputBufferLimit{
+				HardLimit:   expandedNormal[0],
+				SoftLimit:   expandedNormal[1],
+				SoftSeconds: expandedNormal[2],
+			}
+			c.SetClientOutputBufferLimitNormal(normalLimit)
+		}
+
+		if len(expandedPubsub) != 0 {
+			pubsubLimit := &config.RedisConfig5_0_ClientOutputBufferLimit{
+				HardLimit:   expandedPubsub[0],
+				SoftLimit:   expandedPubsub[1],
+				SoftSeconds: expandedPubsub[2],
+			}
+			c.SetClientOutputBufferLimitPubsub(pubsubLimit)
+		}
+
 		err := setMaxMemory5_0(&c, d)
 		if err != nil {
 			return nil, version, err
 		}
+
 		cs = &redis.ConfigSpec_RedisConfig_5_0{
 			RedisConfig_5_0: &c,
 		}
@@ -164,10 +364,30 @@ func expandRedisConfig(d *schema.ResourceData) (*redis.ConfigSpec_RedisSpec, str
 			SlowlogMaxLen:        slowlogMaxLen,
 			Databases:            databases,
 		}
+
+		if len(expandedNormal) != 0 {
+			normalLimit := &config.RedisConfig6_0_ClientOutputBufferLimit{
+				HardLimit:   expandedNormal[0],
+				SoftLimit:   expandedNormal[1],
+				SoftSeconds: expandedNormal[2],
+			}
+			c.SetClientOutputBufferLimitNormal(normalLimit)
+		}
+
+		if len(expandedPubsub) != 0 {
+			pubsubLimit := &config.RedisConfig6_0_ClientOutputBufferLimit{
+				HardLimit:   expandedPubsub[0],
+				SoftLimit:   expandedPubsub[1],
+				SoftSeconds: expandedPubsub[2],
+			}
+			c.SetClientOutputBufferLimitPubsub(pubsubLimit)
+		}
+
 		err := setMaxMemory6_0(&c, d)
 		if err != nil {
 			return nil, version, err
 		}
+
 		cs = &redis.ConfigSpec_RedisConfig_6_0{
 			RedisConfig_6_0: &c,
 		}
@@ -180,10 +400,30 @@ func expandRedisConfig(d *schema.ResourceData) (*redis.ConfigSpec_RedisSpec, str
 			SlowlogMaxLen:        slowlogMaxLen,
 			Databases:            databases,
 		}
+
+		if len(expandedNormal) != 0 {
+			normalLimit := &config.RedisConfig6_2_ClientOutputBufferLimit{
+				HardLimit:   expandedNormal[0],
+				SoftLimit:   expandedNormal[1],
+				SoftSeconds: expandedNormal[2],
+			}
+			c.SetClientOutputBufferLimitNormal(normalLimit)
+		}
+
+		if len(expandedPubsub) != 0 {
+			pubsubLimit := &config.RedisConfig6_2_ClientOutputBufferLimit{
+				HardLimit:   expandedPubsub[0],
+				SoftLimit:   expandedPubsub[1],
+				SoftSeconds: expandedPubsub[2],
+			}
+			c.SetClientOutputBufferLimitPubsub(pubsubLimit)
+		}
+
 		err := setMaxMemory6_2(&c, d)
 		if err != nil {
 			return nil, version, err
 		}
+
 		cs = &redis.ConfigSpec_RedisConfig_6_2{
 			RedisConfig_6_2: &c,
 		}
@@ -322,7 +562,7 @@ func flattenRedisMaintenanceWindow(mw *redis.MaintenanceWindow) []map[string]int
 	return []map[string]interface{}{result}
 }
 
-func flattenRedisHosts(hs []*redis.Host) ([]map[string]interface{}, error) {
+func flattenRedisHosts(sharded bool, hs []*redis.Host) ([]map[string]interface{}, error) {
 	res := []map[string]interface{}{}
 
 	for _, h := range hs {
@@ -331,6 +571,12 @@ func flattenRedisHosts(hs []*redis.Host) ([]map[string]interface{}, error) {
 		m["subnet_id"] = h.SubnetId
 		m["shard_name"] = h.ShardName
 		m["fqdn"] = h.Name
+		if sharded {
+			m["replica_priority"] = defaultReplicaPriority
+		} else {
+			m["replica_priority"] = h.ReplicaPriority.GetValue()
+		}
+		m["assign_public_ip"] = h.AssignPublicIp
 		res = append(res, m)
 	}
 
@@ -340,17 +586,18 @@ func flattenRedisHosts(hs []*redis.Host) ([]map[string]interface{}, error) {
 func expandRedisHosts(d *schema.ResourceData) ([]*redis.HostSpec, error) {
 	var result []*redis.HostSpec
 	hosts := d.Get("host").([]interface{})
+	sharded := d.Get("sharded").(bool)
 
 	for _, v := range hosts {
 		config := v.(map[string]interface{})
-		host := expandRedisHost(config)
+		host := expandRedisHost(sharded, config)
 		result = append(result, host)
 	}
 
 	return result, nil
 }
 
-func expandRedisHost(config map[string]interface{}) *redis.HostSpec {
+func expandRedisHost(sharded bool, config map[string]interface{}) *redis.HostSpec {
 	host := &redis.HostSpec{}
 	if v, ok := config["zone"]; ok {
 		host.ZoneId = v.(string)
@@ -362,6 +609,15 @@ func expandRedisHost(config map[string]interface{}) *redis.HostSpec {
 
 	if v, ok := config["shard_name"]; ok {
 		host.ShardName = v.(string)
+	}
+
+	if v, ok := config["replica_priority"]; ok && !sharded {
+		priority := v.(int)
+		host.ReplicaPriority = &wrappers.Int64Value{Value: int64(priority)}
+	}
+
+	if v, ok := config["assign_public_ip"]; ok {
+		host.AssignPublicIp = v.(bool)
 	}
 	return host
 }

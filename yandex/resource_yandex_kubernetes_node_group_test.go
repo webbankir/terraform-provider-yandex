@@ -199,6 +199,9 @@ func TestAccKubernetesNodeGroup_update(t *testing.T) {
 	nodeUpdatedResource.Cores = "2"
 	nodeUpdatedResource.DiskSize = "65"
 	nodeUpdatedResource.Preemptible = "false"
+	nodeUpdatedResource.NodeName = "new-{instance.short_id}"
+	nodeUpdatedResource.TemplateLabelKey = "two"
+	nodeUpdatedResource.TemplateLabelValue = "2"
 
 	// update maintenance policy
 	nodeUpdatedResource.constructMaintenancePolicyField(false, false, dailyMaintenancePolicy)
@@ -206,6 +209,9 @@ func TestAccKubernetesNodeGroup_update(t *testing.T) {
 	//nodeUpdatedResource.FixedScale = "2"
 
 	nodeUpdatedResource2 := nodeUpdatedResource
+	nodeUpdatedResource2.NodeName = ""
+	// clearing node group template labels
+	nodeUpdatedResource2.TemplateLabelKey = ""
 	nodeUpdatedResource2.constructMaintenancePolicyField(true, true, weeklyMaintenancePolicy)
 
 	nodeUpdatedResource3 := nodeUpdatedResource2
@@ -272,7 +278,7 @@ func TestAccKubernetesNodeGroup_update(t *testing.T) {
 
 func TestAccKubernetesNodeGroupNetworkInterfaces_update(t *testing.T) {
 	clusterResource := clusterInfoWithSecurityGroups("TestAccKubernetesNodeGroupNetworkInterfaces_update", true)
-	nodeResource := nodeGroupInfo(clusterResource.ClusterResourceName)
+	nodeResource := nodeGroupInfoIPv4DNSFQDN(clusterResource.ClusterResourceName)
 	nodeResource.constructNetworkInterfaces(clusterResource.SubnetResourceNameA, clusterResource.SecurityGroupName)
 	nodeResourceFullName := nodeResource.ResourceFullName(true)
 
@@ -280,7 +286,12 @@ func TestAccKubernetesNodeGroupNetworkInterfaces_update(t *testing.T) {
 	nodeUpdatedResource.NetworkInterfaces = enableNAT
 
 	nodeUpdatedResource2 := nodeUpdatedResource
+	nodeUpdatedResource2.IPv4DNSFQDN = "new-{instance.short_id}.ipv4.internal."
 	nodeUpdatedResource2.constructNetworkInterfaces(clusterResource.SubnetResourceNameA, "")
+
+	nodeUpdatedResource3 := nodeUpdatedResource2
+	nodeUpdatedResource3.IPv4DNSFQDN = ""
+	nodeUpdatedResource3.constructNetworkInterfaces(clusterResource.SubnetResourceNameA, "")
 
 	var ng k8s.NodeGroup
 
@@ -308,6 +319,13 @@ func TestAccKubernetesNodeGroupNetworkInterfaces_update(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckKubernetesNodeGroupExists(nodeResourceFullName, &ng),
 					checkNodeGroupAttributes(&ng, &nodeUpdatedResource2, true, false),
+				),
+			},
+			{
+				Config: testAccKubernetesNodeGroupConfig_basic(clusterResource, nodeUpdatedResource3),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckKubernetesNodeGroupExists(nodeResourceFullName, &ng),
+					checkNodeGroupAttributes(&ng, &nodeUpdatedResource3, true, false),
 				),
 			},
 		},
@@ -365,9 +383,21 @@ func TestAccKubernetesNodeGroup_createPlacementGroup(t *testing.T) {
 func TestAccKubernetesNodeGroup_dualStack(t *testing.T) {
 	clusterResource := clusterInfoDualStack("TestAccKubernetesNodeGroup_dualStack", true)
 	nodeResource := nodeGroupInfoDualStack(clusterResource.ClusterResourceName)
-
 	nodeResource.constructNetworkInterfaces(clusterResource.SubnetResourceNameA, clusterResource.SecurityGroupName)
 	nodeResourceFullName := nodeResource.ResourceFullName(true)
+
+	nodeUpdatedResource := nodeResource
+	nodeUpdatedResource.IPv4DNSFQDN = "new-{instance.short_id}.ipv4.internal."
+	nodeUpdatedResource.constructNetworkInterfaces(clusterResource.SubnetResourceNameA, clusterResource.SecurityGroupName)
+
+	nodeUpdatedResource2 := nodeUpdatedResource
+	nodeUpdatedResource2.IPv6DNSFQDN = "new-{instance.short_id}.ipv6.internal."
+	nodeUpdatedResource2.constructNetworkInterfaces(clusterResource.SubnetResourceNameA, clusterResource.SecurityGroupName)
+
+	nodeUpdatedResource3 := nodeUpdatedResource2
+	nodeUpdatedResource3.IPv4DNSFQDN = ""
+	nodeUpdatedResource3.IPv6DNSFQDN = ""
+	nodeUpdatedResource3.constructNetworkInterfaces(clusterResource.SubnetResourceNameA, clusterResource.SecurityGroupName)
 
 	var ng k8s.NodeGroup
 
@@ -385,6 +415,27 @@ func TestAccKubernetesNodeGroup_dualStack(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckKubernetesNodeGroupExists(nodeResourceFullName, &ng),
 					checkNodeGroupAttributes(&ng, &nodeResource, true, false),
+				),
+			},
+			{
+				Config: testAccKubernetesNodeGroupConfig_basic(clusterResource, nodeUpdatedResource),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckKubernetesNodeGroupExists(nodeResourceFullName, &ng),
+					checkNodeGroupAttributes(&ng, &nodeUpdatedResource, true, false),
+				),
+			},
+			{
+				Config: testAccKubernetesNodeGroupConfig_basic(clusterResource, nodeUpdatedResource2),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckKubernetesNodeGroupExists(nodeResourceFullName, &ng),
+					checkNodeGroupAttributes(&ng, &nodeUpdatedResource2, true, false),
+				),
+			},
+			{
+				Config: testAccKubernetesNodeGroupConfig_basic(clusterResource, nodeUpdatedResource3),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckKubernetesNodeGroupExists(nodeResourceFullName, &ng),
+					checkNodeGroupAttributes(&ng, &nodeUpdatedResource3, true, false),
 				),
 			},
 		},
@@ -510,6 +561,8 @@ type resourceNodeGroupInfo struct {
 	MaintenancePolicy string
 
 	NetworkInterfaces string
+	IPv4DNSFQDN       string
+	IPv6DNSFQDN       string
 
 	autoUpgrade       bool
 	autoRepair        bool
@@ -520,6 +573,11 @@ type resourceNodeGroupInfo struct {
 	DualStack bool
 
 	NetworkAccelerationType string
+
+	NodeName string
+
+	TemplateLabelKey   string
+	TemplateLabelValue string
 }
 
 func nodeGroupInfo(clusterResourceName string) resourceNodeGroupInfo {
@@ -529,6 +587,20 @@ func nodeGroupInfo(clusterResourceName string) resourceNodeGroupInfo {
 func nodeGroupInfoDualStack(clusterResourceName string) resourceNodeGroupInfo {
 	ng := nodeGroupInfoWithMaintenance(clusterResourceName, true, true, anyMaintenancePolicy)
 	ng.DualStack = true
+	ng.IPv4DNSFQDN = "{instance.short_id}.{instance_group.id}.ipv4.internal."
+	ng.IPv6DNSFQDN = "{instance.short_id}.{instance_group.id}.ipv6.internal."
+	return ng
+}
+
+func nodeGroupInfoAutoscaled(clusterResourceName string) resourceNodeGroupInfo {
+	ng := nodeGroupInfo(clusterResourceName)
+	ng.ScalePolicy = autoscaledScalePolicy
+	return ng
+}
+
+func nodeGroupInfoIPv4DNSFQDN(clusterResourceName string) resourceNodeGroupInfo {
+	ng := nodeGroupInfo(clusterResourceName)
+	ng.IPv4DNSFQDN = "{instance.short_id}.{instance_group.id}.ipv4.internal."
 	return ng
 }
 
@@ -549,15 +621,12 @@ func nodeGroupInfoWithMaintenance(clusterResourceName string, autoUpgrade, autoR
 		NodeLabelValue:        "node_label_value",
 		ScalePolicy:           fixedScalePolicy,
 		NetworkInterfaces:     enableNAT,
+		NodeName:              "node-{instance.short_id}",
+		TemplateLabelKey:      "one",
+		TemplateLabelValue:    "1",
 	}
 
 	info.constructMaintenancePolicyField(autoUpgrade, autoRepair, policyType)
-	return info
-}
-
-func nodeGroupInfoAutoscaled(clusterResourceName string) resourceNodeGroupInfo {
-	info := nodeGroupInfo(clusterResourceName)
-	info.ScalePolicy = autoscaledScalePolicy
 	return info
 }
 
@@ -597,11 +666,25 @@ func (i *resourceNodeGroupInfo) constructMaintenancePolicyField(autoUpgrade, aut
 	}
 }
 
-func (i *resourceNodeGroupInfo) constructNetworkInterfaces(subnetName, securityGroupName string) {
+func (i *resourceNodeGroupInfo) constructNetworkInterfaces(subnetName string, securityGroupName string) {
 	i.SubnetName = subnetName
 	i.SecurityGroupName = securityGroupName
+
 	if i.DualStack {
-		i.NetworkInterfaces = fmt.Sprintf(networkInterfacesTemplateDualStack, subnetName, securityGroupName)
+		if i.IPv4DNSFQDN != "" && i.IPv6DNSFQDN != "" {
+			i.NetworkInterfaces = fmt.Sprintf(networkInterfacesTemplateDualStackWithDNSRecords,
+				subnetName,
+				securityGroupName,
+				i.IPv4DNSFQDN,
+				i.IPv6DNSFQDN,
+			)
+			return
+		}
+
+		i.NetworkInterfaces = fmt.Sprintf(networkInterfacesTemplateDualStack,
+			subnetName,
+			securityGroupName,
+		)
 		return
 	}
 
@@ -609,6 +692,15 @@ func (i *resourceNodeGroupInfo) constructNetworkInterfaces(subnetName, securityG
 	securityGroupIDGetter := ""
 	if securityGroupName != "" {
 		securityGroupIDGetter = fmt.Sprintf("\"${yandex_vpc_security_group.%s.id}\"", i.SecurityGroupName)
+	}
+
+	if i.IPv4DNSFQDN != "" {
+		i.NetworkInterfaces = fmt.Sprintf(networkInterfacesTemplateWithDNSRecords,
+			subnetNameGetter,
+			securityGroupIDGetter,
+			i.IPv4DNSFQDN,
+		)
+		return
 	}
 
 	i.NetworkInterfaces = fmt.Sprintf(networkInterfacesTemplate,
@@ -754,6 +846,14 @@ resource "yandex_kubernetes_node_group" "{{.NodeGroupResourceName}}" {
     {{if .NetworkAccelerationType}}
 	network_acceleration_type = "{{.NetworkAccelerationType}}"
 	{{end}}
+
+    name = "{{.NodeName}}"
+
+    {{if .TemplateLabelKey}}
+    labels = {
+      {{.TemplateLabelKey}} = "{{.TemplateLabelValue}}"
+    }
+    {{end}}
   }
 
   {{.ScalePolicy}}
@@ -788,12 +888,38 @@ var networkInterfacesTemplate = `
   }
 `
 
+var networkInterfacesTemplateWithDNSRecords = `
+  network_interface {
+	nat = true
+    subnet_ids = [%s]
+	security_group_ids = [%s]
+    ipv4_dns_records {
+      fqdn = "%s"
+    }
+  }
+`
+
 var networkInterfacesTemplateDualStack = `
   network_interface {
 	ipv4 = true
 	ipv6 = true
     subnet_ids = ["%s"]
     security_group_ids = ["%s"]
+  }
+`
+
+var networkInterfacesTemplateDualStackWithDNSRecords = `
+  network_interface {
+	ipv4 = true
+	ipv6 = true
+    subnet_ids = ["%s"]
+    security_group_ids = ["%s"]
+    ipv4_dns_records {
+      fqdn = "%s"
+    }
+    ipv6_dns_records {
+      fqdn = "%s"
+    }
   }
 `
 
@@ -823,6 +949,10 @@ func checkNodeGroupAttributes(ng *k8s.NodeGroup, info *resourceNodeGroupInfo, rs
 			return fmt.Errorf("failed to get kubernetes node group specs info")
 		}
 
+		expectedTemplateLabels := map[string]string{}
+		if info.TemplateLabelKey != "" {
+			expectedTemplateLabels[info.TemplateLabelKey] = info.TemplateLabelValue
+		}
 		resourceFullName := info.ResourceFullName(rs)
 		checkFuncsAr := []resource.TestCheckFunc{
 			resource.TestCheckResourceAttr(resourceFullName, "cluster_id", ng.ClusterId),
@@ -854,6 +984,9 @@ func checkNodeGroupAttributes(ng *k8s.NodeGroup, info *resourceNodeGroupInfo, rs
 				strconv.FormatBool(tpl.GetSchedulingPolicy().GetPreemptible())),
 			resource.TestCheckResourceAttr(resourceFullName, "instance_template.0.network_acceleration_type",
 				strings.ToLower(tpl.NetworkSettings.Type.String())),
+			resource.TestCheckResourceAttr(resourceFullName, "instance_template.0.name", info.NodeName),
+			testCheckResourceMap(resourceFullName, "instance_template.0.labels", tpl.GetLabels()),
+			testCheckResourceMap(resourceFullName, "instance_template.0.labels", expectedTemplateLabels),
 
 			resource.TestCheckResourceAttr(resourceFullName, "version_info.0.current_version",
 				versionInfo.GetCurrentVersion()),
@@ -945,6 +1078,19 @@ func checkNodeGroupAttributes(ng *k8s.NodeGroup, info *resourceNodeGroupInfo, rs
 			checkFuncsAr = append(checkFuncsAr,
 				resource.TestCheckResourceAttr(resourceFullName, "instance_template.0.network_interface.#", "1"),
 				resource.TestCheckResourceAttr(resourceFullName, "instance_template.0.network_interface.0.nat", "true"),
+			)
+		}
+
+		if info.IPv4DNSFQDN != "" {
+			checkFuncsAr = append(checkFuncsAr,
+				resource.TestCheckResourceAttr(resourceFullName, "instance_template.0.network_interface.0.ipv4_dns_records.#", "1"),
+				resource.TestCheckResourceAttr(resourceFullName, "instance_template.0.network_interface.0.ipv4_dns_records.0.fqdn", info.IPv4DNSFQDN),
+			)
+		}
+		if info.IPv6DNSFQDN != "" && info.DualStack {
+			checkFuncsAr = append(checkFuncsAr,
+				resource.TestCheckResourceAttr(resourceFullName, "instance_template.0.network_interface.0.ipv6_dns_records.#", "1"),
+				resource.TestCheckResourceAttr(resourceFullName, "instance_template.0.network_interface.0.ipv6_dns_records.0.fqdn", info.IPv6DNSFQDN),
 			)
 		}
 

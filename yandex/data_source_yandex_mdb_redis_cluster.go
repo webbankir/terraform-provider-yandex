@@ -62,6 +62,14 @@ func dataSourceYandexMDBRedisCluster() *schema.Resource {
 							Type:     schema.TypeInt,
 							Computed: true,
 						},
+						"client_output_buffer_limit_normal": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+						"client_output_buffer_limit_pubsub": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
 						"databases": {
 							Type:     schema.TypeInt,
 							Computed: true,
@@ -114,6 +122,15 @@ func dataSourceYandexMDBRedisCluster() *schema.Resource {
 						"fqdn": {
 							Type:     schema.TypeString,
 							Computed: true,
+						},
+						"replica_priority": {
+							Type:     schema.TypeInt,
+							Optional: true,
+							Default:  defaultReplicaPriority,
+						},
+						"assign_public_ip": {
+							Type:     schema.TypeBool,
+							Optional: true,
 						},
 					},
 				},
@@ -250,13 +267,15 @@ func dataSourceYandexMDBRedisClusterRead(d *schema.ResourceData, meta interface{
 	conf := extractRedisConfig(cluster.Config)
 	err = d.Set("config", []map[string]interface{}{
 		{
-			"timeout":                 conf.timeout,
-			"maxmemory_policy":        conf.maxmemoryPolicy,
-			"version":                 conf.version,
-			"notify_keyspace_events":  conf.notifyKeyspaceEvents,
-			"slowlog_log_slower_than": conf.slowlogLogSlowerThan,
-			"slowlog_max_len":         conf.slowlogMaxLen,
-			"databases":               conf.databases,
+			"timeout":                           conf.timeout,
+			"maxmemory_policy":                  conf.maxmemoryPolicy,
+			"version":                           conf.version,
+			"notify_keyspace_events":            conf.notifyKeyspaceEvents,
+			"slowlog_log_slower_than":           conf.slowlogLogSlowerThan,
+			"slowlog_max_len":                   conf.slowlogMaxLen,
+			"databases":                         conf.databases,
+			"client_output_buffer_limit_normal": conf.clientOutputBufferLimitNormal,
+			"client_output_buffer_limit_pubsub": conf.clientOutputBufferLimitPubsub,
 		},
 	})
 	if err != nil {
@@ -268,7 +287,7 @@ func dataSourceYandexMDBRedisClusterRead(d *schema.ResourceData, meta interface{
 		return err
 	}
 
-	hs, err := flattenRedisHosts(hosts)
+	hs, err := flattenRedisHosts(cluster.Sharded, hosts)
 	if err != nil {
 		return err
 	}

@@ -135,6 +135,17 @@ The `instance_template` block supports:
 * `network_acceleration_type` - (Optional) Type of network acceleration. Values: `standard`, `software_accelerated`.
 
 * `container_runtime` - (Optional) Container runtime configuration. The structure is documented below.
+
+* `name` - (Optional) Name template of the instance.
+In order to be unique it must contain at least one of instance unique placeholders:   
+{instance.short_id}   
+{instance.index}   
+combination of {instance.zone_id} and {instance.index_in_zone}   
+Example: my-instance-{instance.index}  
+If not set, default is used: {instance_group.id}-{instance.short_id}   
+It may also contain another placeholders, see [Compute Instance group metadata doc](https://cloud.yandex.com/en-ru/docs/compute/api-ref/grpc/instance_group_service) for full list.
+
+* `labels` - (Optional) Labels that will be assigned to compute nodes (instances), created by the Node Group.
 ---
 
 The `boot_disk` block supports:
@@ -162,6 +173,26 @@ The `network_interface` block supports:
 * `ipv6` - (Optional) If true, allocate an IPv6 address for the interface. The address will be automatically assigned from the specified subnet.
 * `nat` - A public address that can be used to access the internet over NAT.
 * `security_group_ids` - (Optional) Security group ids for network interface.
+* `ipv4_dns_records` - (Optional) List of configurations for creating ipv4 DNS records. The structure is documented below.
+* `ipv6_dns_records` - (Optional) List of configurations for creating ipv6 DNS records. The structure is documented below.
+
+---
+
+The `ipv4_dns_records` block supports:
+
+* `fqdn` - (Required) DNS record FQDN.
+* `dns_zone_id` - (Optional) DNS zone ID (if not set, private zone is used).
+* `ttl` - (Optional) DNS record TTL (in seconds).
+* `ptr` - (Optional) When set to true, also create a PTR DNS record.
+
+---
+
+The `ipv6_dns_records` block supports:
+
+* `fqdn` - (Required) DNS record FQDN.
+* `dns_zone_id` - (Optional) DNS zone ID (if not set, private zone is used).
+* `ttl` - (Optional) DNS record TTL (in seconds).
+* `ptr` - (Optional) When set to true, also create a PTR DNS record.
 
 ---
 

@@ -159,6 +159,54 @@ func resourceYandexKubernetesNodeGroup() *schema.Resource {
 										Set:      schema.HashString,
 										Optional: true,
 									},
+									"ipv4_dns_records": {
+										Type:     schema.TypeList,
+										Optional: true,
+										Elem: &schema.Resource{
+											Schema: map[string]*schema.Schema{
+												"fqdn": {
+													Type:     schema.TypeString,
+													Required: true,
+												},
+												"dns_zone_id": {
+													Type:     schema.TypeString,
+													Optional: true,
+												},
+												"ttl": {
+													Type:     schema.TypeInt,
+													Optional: true,
+												},
+												"ptr": {
+													Type:     schema.TypeBool,
+													Optional: true,
+												},
+											},
+										},
+									},
+									"ipv6_dns_records": {
+										Type:     schema.TypeList,
+										Optional: true,
+										Elem: &schema.Resource{
+											Schema: map[string]*schema.Schema{
+												"fqdn": {
+													Type:     schema.TypeString,
+													Required: true,
+												},
+												"dns_zone_id": {
+													Type:     schema.TypeString,
+													Optional: true,
+												},
+												"ttl": {
+													Type:     schema.TypeInt,
+													Optional: true,
+												},
+												"ptr": {
+													Type:     schema.TypeBool,
+													Optional: true,
+												},
+											},
+										},
+									},
 								},
 							},
 						},
@@ -202,6 +250,16 @@ func resourceYandexKubernetesNodeGroup() *schema.Resource {
 									},
 								},
 							},
+						},
+						"name": {
+							Type:     schema.TypeString,
+							Optional: true,
+						},
+						"labels": {
+							Type:     schema.TypeMap,
+							Optional: true,
+							Elem:     &schema.Schema{Type: schema.TypeString},
+							Set:      schema.HashString,
 						},
 					},
 				},
@@ -733,6 +791,11 @@ func getNodeGroupTemplate(d *schema.ResourceData) (*k8s.NodeTemplate, error) {
 		return nil, fmt.Errorf("error expanding metadata while creating Kubernetes node group: %s", err)
 	}
 
+	labels, err := expandLabels(h.Get("labels"))
+	if err != nil {
+		return nil, fmt.Errorf("error expanding template labels while creating Kubernetes node group: %s", err)
+	}
+
 	ns, err := getNodeGroupTemplateNetworkSettings(d)
 	if err != nil {
 		return nil, fmt.Errorf("error expanding metadata while creating Kubernetes node group: %s", err)
@@ -754,6 +817,8 @@ func getNodeGroupTemplate(d *schema.ResourceData) (*k8s.NodeTemplate, error) {
 		PlacementPolicy:          getNodeGroupTemplatePlacementPolicy(d),
 		NetworkSettings:          ns,
 		ContainerRuntimeSettings: crs,
+		Name:                     h.GetString("name"),
+		Labels:                   labels,
 	}
 
 	return tpl, nil
@@ -821,6 +886,17 @@ func getNodeGroupNetworkInterfaceSpecs(d *schema.ResourceData) []*k8s.NetworkInt
 
 		if subnets, ok := nif["subnet_ids"]; ok {
 			nifSpec.SubnetIds = expandSubnetIds(subnets)
+		}
+
+		if rec, ok := nif["ipv4_dns_records"]; ok {
+			if nifSpec.PrimaryV4AddressSpec != nil {
+				nifSpec.PrimaryV4AddressSpec.DnsRecordSpecs = expandK8SNodeGroupDNSRecords(rec.([]interface{}))
+			}
+		}
+		if rec, ok := nif["ipv6_dns_records"]; ok {
+			if nifSpec.PrimaryV6AddressSpec != nil {
+				nifSpec.PrimaryV6AddressSpec.DnsRecordSpecs = expandK8SNodeGroupDNSRecords(rec.([]interface{}))
+			}
 		}
 
 		nifs = append(nifs, nifSpec)
@@ -975,6 +1051,8 @@ var nodeGroupUpdateFieldsMap = map[string]string{
 	"instance_template.0.network_interface":                     "node_template.network_interface_specs",
 	"instance_template.0.network_acceleration_type":             "node_template.network_settings",
 	"instance_template.0.container_runtime.0.type":              "node_template.container_runtime_settings.type",
+	"instance_template.0.name":                                  "node_template.name",
+	"instance_template.0.labels":                                "node_template.labels",
 	"scale_policy.0.fixed_scale.0.size":                         "scale_policy.fixed_scale.size",
 	"scale_policy.0.auto_scale.0.min":                           "scale_policy.auto_scale.min_size",
 	"scale_policy.0.auto_scale.0.max":                           "scale_policy.auto_scale.max_size",
@@ -1114,6 +1192,8 @@ func flattenKubernetesNodeGroupTemplate(ngTpl *k8s.NodeTemplate) []map[string]in
 		"placement_policy":          flattenKubernetesNodeGroupTemplatePlacementPolicy(ngTpl.GetPlacementPolicy()),
 		"network_acceleration_type": strings.ToLower(ngTpl.GetNetworkSettings().GetType().String()),
 		"container_runtime":         flattenKubernetesNodeGroupTemplateContainerRuntime(ngTpl.GetContainerRuntimeSettings()),
+		"name":                      ngTpl.GetName(),
+		"labels":                    ngTpl.GetLabels(),
 	}
 
 	return []map[string]interface{}{tpl}
@@ -1129,13 +1209,21 @@ func flattenKubernetesNodeGroupNetworkInterfaces(ifs []*k8s.NetworkInterfaceSpec
 }
 
 func flattenKubernetesNodeGroupNetworkInterface(nif *k8s.NetworkInterfaceSpec) map[string]interface{} {
-	return map[string]interface{}{
+	res := map[string]interface{}{
 		"subnet_ids":         nif.SubnetIds,
 		"security_group_ids": nif.SecurityGroupIds,
 		"nat":                flattenKubernetesNodeGroupNat(nif),
 		"ipv4":               nif.PrimaryV4AddressSpec != nil,
 		"ipv6":               nif.PrimaryV6AddressSpec != nil,
 	}
+	if nif.PrimaryV4AddressSpec != nil {
+		res["ipv4_dns_records"] = flattenK8SNodeGroupDNSRecords(nif.GetPrimaryV4AddressSpec().GetDnsRecordSpecs())
+	}
+	if nif.PrimaryV6AddressSpec != nil {
+		res["ipv6_dns_records"] = flattenK8SNodeGroupDNSRecords(nif.GetPrimaryV6AddressSpec().GetDnsRecordSpecs())
+	}
+
+	return res
 }
 
 func flattenKubernetesNodeGroupNat(nif *k8s.NetworkInterfaceSpec) bool {

@@ -93,6 +93,8 @@ func testAccDataSourceMDBRedisClusterAttributesCheck(datasourceName string, reso
 			"config.0.notify_keyspace_events",
 			"config.0.slowlog_log_slower_than",
 			"config.0.slowlog_max_len",
+			"config.0.client_output_buffer_limit_normal",
+			"config.0.client_output_buffer_limit_pubsub",
 			"config.0.databases",
 			"config.0.version",
 			"security_group_ids",
@@ -143,6 +145,8 @@ func testAccDataSourceMDBRedisClusterCheck(datasourceName string, resourceName s
 		resource.TestCheckResourceAttr(datasourceName, "persistence_mode", persistenceModeStr),
 		resource.TestCheckResourceAttr(datasourceName, "host.#", "1"),
 		resource.TestCheckResourceAttrSet(datasourceName, "host.0.fqdn"),
+		resource.TestCheckResourceAttr(datasourceName, "host.0.replica_priority", fmt.Sprintf("%d", defaultReplicaPriority)),
+		resource.TestCheckResourceAttr(datasourceName, "host.0.assign_public_ip", "false"),
 		testAccCheckCreatedAtAttr(datasourceName),
 		resource.TestCheckResourceAttr(datasourceName, "security_group_ids.#", "1"),
 		resource.TestCheckResourceAttr(datasourceName, "maintenance_window.0.type", "WEEKLY"),
@@ -168,9 +172,11 @@ func testAccDataSourceMDBRedisClusterConfig(redisName, redisDesc string, tlsEnab
 	useDataID bool) string {
 	if useDataID {
 		return testAccMDBRedisClusterConfigMain(redisName, redisDesc, "PRESTABLE", false,
-			tlsEnabled, persistenceMode, version, "hm1.nano", 16, "") + mdbRedisClusterByIDConfig
+			tlsEnabled, persistenceMode, version, "hm1.nano", 16, "", "", "",
+			[]*bool{nil}, []*int{nil}) + mdbRedisClusterByIDConfig
 	}
 
 	return testAccMDBRedisClusterConfigMain(redisName, redisDesc, "PRESTABLE", false,
-		tlsEnabled, persistenceMode, version, "hm1.nano", 16, "") + mdbRedisClusterByNameConfig
+		tlsEnabled, persistenceMode, version, "hm1.nano", 16, "", "", "",
+		[]*bool{nil}, []*int{nil}) + mdbRedisClusterByNameConfig
 }

@@ -85,6 +85,9 @@ The `instance_template` block supports:
 * `placement_policy` - (Optional) The placement policy configuration. The structure is documented below.
 
 * `container_runtime` - Container runtime configuration. The structure is documented below.
+
+* `name` - Name template of the instance.
+* `labels` - Labels assigned to compute nodes (instances), created by the Node Group.
 ---
 
 The `network_interface` block supports:
@@ -94,6 +97,26 @@ The `network_interface` block supports:
 * `security_group_ids` - Security group ids for network interface.
 * `ipv4` - Indicates whether the IPv4 address has been assigned.
 * `ipv6` - Indicates whether the IPv6 address has been assigned.
+* `ipv4_dns_records` - List of configurations for creating ipv4 DNS records. The structure is documented below.
+* `ipv6_dns_records` - List of configurations for creating ipv6 DNS records. The structure is documented below.
+
+---
+
+The `ipv4_dns_records` block supports:
+
+* `fqdn` - DNS record FQDN.
+* `dns_zone_id` - DNS zone ID (if not set, private zone is used).
+* `ttl` - DNS record TTL (in seconds).
+* `ptr` - When set to true, also create a PTR DNS record.
+
+---
+
+The `ipv6_dns_records` block supports:
+
+* `fqdn` - DNS record FQDN.
+* `dns_zone_id` - DNS zone ID (if not set, private zone is used).
+* `ttl` - DNS record TTL (in seconds).
+* `ptr` - When set to true, also create a PTR DNS record.
 
 ---
 
