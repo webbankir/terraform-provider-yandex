@@ -1,4 +1,13 @@
-## 0.77.0 (Unreleased)
+## 0.78.0 (Unreleased)
+BUG FIXES:
+* cdn: fixed wrong documentation example
+
+FEATURES:
+* greenplum: add `maintenance_window` attribute to resource and data source
+* greenplum: support for changing the user's password
+* greenplum: support for changing segment and master resources
+
+## 0.77.0 (July 27, 2022)
 BUG FIXES:
 * iam: fix access bindings deletion
 * ydb: fixed panic if database was removed outside of terraform
@@ -10,6 +19,7 @@ BUG FIXES:
 ENHANCEMENTS:
 * mdb: add `sqlcollation` attribute to `yandex_mdb_sqlserver_cluster` resource and data source
 * serverless: increase operation timeouts in `yandex_function` resource
+* cdn: added the ability to set custom `folder_id` attribute for resources `yandex_cdn_origin_group` and `yandex_cdn_resource`
 
 FEATURES:
 * k8s: add `instance_template.name` attribute to `node group` resource and data source
