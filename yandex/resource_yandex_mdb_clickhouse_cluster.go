@@ -572,6 +572,16 @@ func resourceYandexMDBClickHouseCluster() *schema.Resource {
 							Optional: true,
 							Default:  false,
 						},
+						"data_transfer": {
+							Type:     schema.TypeBool,
+							Optional: true,
+							Default:  false,
+						},
+						"yandex_query": {
+							Type:     schema.TypeBool,
+							Optional: true,
+							Default:  false,
+						},
 					},
 				},
 			},
@@ -840,7 +850,7 @@ func prepareCreateClickHouseCreateRequest(d *schema.ResourceData, meta *Config) 
 		return nil, nil, fmt.Errorf("error while expanding hosts on ClickHouse Cluster create: %s", err)
 	}
 
-	_, toAdd := clickHouseHostsDiff(nil, hosts)
+	_, toAdd, _ := clickHouseHostsDiff(nil, hosts)
 	firstHosts := toAdd["zk"]
 	firstShard := ""
 	delete(toAdd, "zk")
@@ -957,7 +967,7 @@ func resourceYandexMDBClickHouseClusterRead(d *schema.ResourceData, meta interfa
 		return err
 	}
 
-	ac := flattenClickHouseAccess(cluster.Config.Access)
+	ac := flattenClickHouseAccess(cluster.GetConfig().GetAccess())
 	if err := d.Set("access", ac); err != nil {
 		return err
 	}
@@ -1337,6 +1347,7 @@ func updateClickHouseClusterHosts(d *schema.ResourceData, meta interface{}) erro
 	if err != nil {
 		return err
 	}
+
 	currZkHosts := []*clickhouse.Host{}
 	for _, h := range currHosts {
 		if h.Type == clickhouse.Host_ZOOKEEPER {
@@ -1350,7 +1361,14 @@ func updateClickHouseClusterHosts(d *schema.ResourceData, meta interface{}) erro
 		}
 	}
 
-	toDelete, toAdd := clickHouseHostsDiff(currHosts, targetHosts)
+	toDelete, toAdd, toUpdate := clickHouseHostsDiff(currHosts, targetHosts)
+
+	for _, h := range toUpdate {
+		err = updateClickHouseHost(ctx, config, d, h)
+		if err != nil {
+			return err
+		}
+	}
 
 	// Check if any shard has HA-configuration (2+ hosts)
 	needZk := false
@@ -1663,6 +1681,23 @@ func createClickHouseHost(ctx context.Context, config *Config, d *schema.Resourc
 	err = op.Wait(ctx)
 	if err != nil {
 		return fmt.Errorf("error while adding host to ClickHouse Cluster %q: %s", d.Id(), err)
+	}
+	return nil
+}
+
+func updateClickHouseHost(ctx context.Context, config *Config, d *schema.ResourceData, spec *clickhouse.UpdateHostSpec) error {
+	op, err := config.sdk.WrapOperation(
+		config.sdk.MDB().Clickhouse().Cluster().UpdateHosts(ctx, &clickhouse.UpdateClusterHostsRequest{
+			ClusterId:       d.Id(),
+			UpdateHostSpecs: []*clickhouse.UpdateHostSpec{spec},
+		}),
+	)
+	if err != nil {
+		return fmt.Errorf("error while requesting API to update host of ClickHouse Cluster %q: %s", d.Id(), err)
+	}
+	err = op.Wait(ctx)
+	if err != nil {
+		return fmt.Errorf("error while updating host of ClickHouse Cluster %q: %s", d.Id(), err)
 	}
 	return nil
 }

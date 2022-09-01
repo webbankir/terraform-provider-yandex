@@ -132,6 +132,14 @@ func TestAccMDBClickHouseCluster_full(t *testing.T) {
 					resource.TestCheckResourceAttr(chResource, "security_group_ids.#", "1"),
 					resource.TestCheckResourceAttrSet(chResource, "service_account_id"),
 					resource.TestCheckResourceAttrSet(chResource, "host.0.fqdn"),
+
+					resource.TestCheckResourceAttr(chResource, "access.0.web_sql", "true"),
+					resource.TestCheckResourceAttr(chResource, "access.0.data_lens", "true"),
+					resource.TestCheckResourceAttr(chResource, "access.0.metrika", "true"),
+					resource.TestCheckResourceAttr(chResource, "access.0.serverless", "true"),
+					resource.TestCheckResourceAttr(chResource, "access.0.data_transfer", "true"),
+					resource.TestCheckResourceAttr(chResource, "access.0.yandex_query", "true"),
+
 					testAccCheckMDBClickHouseClusterContainsLabel(&r, "test_key", "test_value"),
 					testAccCheckMDBClickHouseClusterHasResources(&r, "s2.micro", "network-ssd", 17179869184),
 					testAccCheckMDBClickHouseClusterHasUsers(chResource, map[string][]string{"john": {"testdb"}},
@@ -1191,6 +1199,15 @@ resource "yandex_mdb_clickhouse_cluster" "foo" {
     hour = 20
   }
 
+  access {
+	web_sql       = true
+	data_lens     = true
+	metrika       = true
+	serverless    = true
+	data_transfer = true
+	yandex_query  = true
+  }
+
   deletion_protection = %t
 }
 `, name, desc, environment, chVersion, deletionProtection)
@@ -1909,7 +1926,7 @@ resource "yandex_mdb_clickhouse_cluster" "bar" {
   name           = "%s"
   description    = "%s"
   environment    = "PRESTABLE"
-  network_id     = "${yandex_vpc_network.mdb-ch-test-net.id}"
+  network_id     = yandex_vpc_network.mdb-ch-test-net.id
   admin_password = "strong_password"
 
   clickhouse {
@@ -2028,17 +2045,19 @@ resource "yandex_mdb_clickhouse_cluster" "bar" {
   }
 
   host {
-    type       = "CLICKHOUSE"
-    zone       = "ru-central1-a"
-    subnet_id  = "${yandex_vpc_subnet.mdb-ch-test-subnet-a.id}"
-    shard_name = "shard1"
+    type             = "CLICKHOUSE"
+    zone             = "ru-central1-a"
+    subnet_id        = yandex_vpc_subnet.mdb-ch-test-subnet-a.id
+    shard_name       = "shard1"
+    assign_public_ip = false
   }
 
   host {
-    type      = "CLICKHOUSE"
-    zone      = "ru-central1-b"
-    subnet_id = "${yandex_vpc_subnet.mdb-ch-test-subnet-b.id}"
-    shard_name = "shard2"
+    type             = "CLICKHOUSE"
+    zone             = "ru-central1-b"
+    subnet_id        = yandex_vpc_subnet.mdb-ch-test-subnet-b.id
+    shard_name       = "shard2"
+    assign_public_ip = false
   }
 
   shard_group {
@@ -2057,7 +2076,6 @@ resource "yandex_mdb_clickhouse_cluster" "bar" {
       "shard1",
     ]
   }
-
 }
 `, name, desc)
 }
@@ -2068,7 +2086,7 @@ resource "yandex_mdb_clickhouse_cluster" "bar" {
   name           = "%s"
   description    = "%s"
   environment    = "PRESTABLE"
-  network_id     = "${yandex_vpc_network.mdb-ch-test-net.id}"
+  network_id     = yandex_vpc_network.mdb-ch-test-net.id
   admin_password = "strong_password"
 
   clickhouse {
@@ -2187,17 +2205,19 @@ resource "yandex_mdb_clickhouse_cluster" "bar" {
   }
 
   host {
-    type       = "CLICKHOUSE"
-    zone       = "ru-central1-a"
-    subnet_id  = "${yandex_vpc_subnet.mdb-ch-test-subnet-a.id}"
-    shard_name = "shard1"
+    type             = "CLICKHOUSE"
+    zone             = "ru-central1-a"
+    subnet_id        = yandex_vpc_subnet.mdb-ch-test-subnet-a.id
+    shard_name       = "shard1"
+    assign_public_ip = true
   }
 
   host {
-    type       = "CLICKHOUSE"
-    zone       = "ru-central1-c"
-    subnet_id  = "${yandex_vpc_subnet.mdb-ch-test-subnet-c.id}"
-    shard_name = "shard3"
+    type             = "CLICKHOUSE"
+    zone             = "ru-central1-c"
+    subnet_id        = yandex_vpc_subnet.mdb-ch-test-subnet-c.id
+    shard_name       = "shard3"
+    assign_public_ip = true
   }
 
   shard_group {

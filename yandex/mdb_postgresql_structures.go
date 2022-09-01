@@ -8,15 +8,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/stretchr/objx"
-	"github.com/yandex-cloud/terraform-provider-yandex/yandex/internal/hashcode"
-
 	wrappers "github.com/golang/protobuf/ptypes/wrappers"
-
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/stretchr/objx"
 
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/postgresql/v1"
 	config "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/postgresql/v1/config"
+	"github.com/yandex-cloud/terraform-provider-yandex/yandex/internal/hashcode"
 )
 
 type PostgreSQLHostSpec struct {
@@ -205,6 +203,7 @@ func flattenPGAccess(a *postgresql.Access) ([]interface{}, error) {
 	out["data_lens"] = a.DataLens
 	out["web_sql"] = a.WebSql
 	out["serverless"] = a.Serverless
+	out["data_transfer"] = a.DataTransfer
 
 	return []interface{}{out}, nil
 }
@@ -765,6 +764,7 @@ func flattenPGDatabases(dbs []*postgresql.Database) []map[string]interface{} {
 		m["name"] = d.Name
 		m["owner"] = d.Owner
 		m["lc_collate"] = d.LcCollate
+		m["template_db"] = d.TemplateDb
 		m["lc_type"] = d.LcCtype
 		m["extension"] = flattenPGExtensions(d.Extensions)
 
@@ -1083,6 +1083,10 @@ func expandPGDatabase(m map[string]interface{}) (*postgresql.DatabaseSpec, error
 		out.LcCollate = v.(string)
 	}
 
+	if v, ok := m["template_db"]; ok {
+		out.TemplateDb = v.(string)
+	}
+
 	if v, ok := m["lc_type"]; ok {
 		out.LcCtype = v.(string)
 	}
@@ -1154,6 +1158,9 @@ func expandPGAccess(d *schema.ResourceData) *postgresql.Access {
 		out.Serverless = v.(bool)
 	}
 
+	if v, ok := d.GetOk("config.0.access.0.data_transfer"); ok {
+		out.DataTransfer = v.(bool)
+	}
 	return out
 }
 

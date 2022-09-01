@@ -1,11 +1,28 @@
 ## 0.78.0 (Unreleased)
 BUG FIXES:
 * cdn: fixed wrong documentation example
+* postgresql: fix `login` and `conn_limit` wrong behaviour in `yandex_mdb_postgresql_user`
+* data source `yandex_organizationmanager_saml_federation_user_account` now works for federations with more than a hundred of users and with viewer role
+
+ENHANCEMENTS:
+* vpc: allow usage of `yandex_vpc_gateway` in `yandex_vpc_route_table.static_route` as `gateway_id` next hop
 
 FEATURES:
 * greenplum: add `maintenance_window` attribute to resource and data source
 * greenplum: support for changing the user's password
 * greenplum: support for changing segment and master resources
+* mdb: add `template_db` attribute to `yandex_mdb_postgresql_cluster` resource and data source
+* clickhouse: add `assign_public_ip` attribute to `host` declaration in resource and data source
+* clickhouse: support hosts update
+* **New Data Source:** `yandex_iot_core_broker`
+* **New Data Source:** `yandex_vpc_gateway`
+* **New Resource:** `yandex_iot_core_broker`
+* **New Resource:** `yandex_vpc_gateway`
+* `data_transfer` flag in `ClusterConfig.access` for ClickHouse, Greenplum, MySQL, PostgreSQL, Kafka, MongoDB
+* `yandex_query` flag in `ClusterConfig.access` for ClickHouse
+
+WARNING:
+* mdb: remove 5 and 6 from supported versions for redis
 
 ## 0.77.0 (July 27, 2022)
 BUG FIXES:
